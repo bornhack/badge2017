@@ -1,0 +1,162 @@
+#!/bin/bash
+
+set -e
+
+readonly URL='https://bornhack.dk/bornhack-2017/program/ics/'
+
+time_to_unix() {
+  local ts="${1//T/ }"
+  date -d "${ts%??Z} UTC" '+%s'
+}
+
+line_break() {
+  local line=''
+  local lines=1
+  local len=0
+  for word in $*; do
+    #echo "word='$word' (${#word}), lines=$lines, len=$len"
+    if (( len == 0 )); then
+      line="$line$word"
+      len=${#word}
+    elif (( len + ${#word} + 1 > 16 )); then
+      if (( lines == 6 )); then
+        break;
+      fi
+      line="$line\\n$word"
+      lines=$((lines+1))
+      len=${#word}
+    else
+      line="$line $word"
+      len=$((len + ${#word} + 1))
+    fi
+    while (( len >= 16 )); do
+      lines=$((lines+1))
+      if (( lines == 6 )); then
+        break;
+      fi
+      len=$((len - 16))
+    done
+  done
+  echo "$line"
+}
+
+declare -a summary
+declare -a location
+declare -a tstart
+declare -a tend
+
+i=0
+while read -r line; do
+  case "$line" in
+  'BEGIN:VCALENDAR')
+    ;;
+  'BEGIN:VEVENT')
+    ;;
+  'END:VEVENT')
+    i=$((i+1))
+    ;;
+  'END:VCALENDAR')
+    break;;
+  'SUMMARY:'*)
+    line="${line#SUMMARY:}"
+    summary[$i]="$(line_break $line)";;
+  'LOCATION:'*)
+    location[$i]="${line#LOCATION:}";;
+  'DTSTART:'*)
+    tstart[$i]="$(time_to_unix "${line#DTSTART:}")";;
+  'DTEND:'*)
+    tend[$i]="$(time_to_unix "${line#DTEND:}")";;
+  *)
+    echo "Don't know '$line'" >&2;;
+  esac
+done < <(curl -s "$URL" | sed -ne ':a;$!N;s/\n //;ta;s/\r//g;s/\\,/,/g;P;D')
+
+readonly N=$i
+
+declare -a sorted
+i=0
+while read -r e; do
+  e="${e##* }"
+  sorted[$i]=$e
+  i=$((i+1))
+done < <(
+  for ((i=0;i < N; i++)); do
+    echo "${tstart[$i]} $i"
+  done | sort
+)
+
+echo 'static const char welcome[] = "\n"'
+echo -e '\t"    Bornhack\\n"'
+echo -e '\t" Make Tradition\\n"'
+echo -e '\t"      2017\\n"'
+echo -e '\t"   bornhack.dk\\n"'
+echo -e '\t"       <3";'
+echo
+echo 'static const char authors[] ='
+echo -e '\t"  Created by:\\n"'
+echo -e '\t"    SiGNOUT\\n"'
+echo -e '\t"     Esmil\\n"'
+echo -e '\t"    flummer\\n"'
+echo -e '\t"\\n"'
+echo -e '\t"github.com/\\n"'
+echo -e '\t"   bornhack/\\n"'
+echo -e '\t"      badge2017";'
+echo
+echo 'static const char online[] = "\n"'
+echo -e '\t"Online IDE:\\n"'
+echo -e '\t"badge.xil.se\\n"'
+echo -e '\t"\\n"'
+echo -e '\t"By:\\n"'
+echo -e '\t"kbeckmann &\\n"'
+echo -e '\t"simonvik\\n";'
+echo
+echo 'static const char code[] ='
+echo -e '\t"To program badge"'
+echo -e '\t"1. Connect USB\\n"'
+echo -e '\t"   cable\\n"'
+echo -e '\t"2. Press BOOT\\n"'
+echo -e '\t"3. Copy .bin\\n"'
+echo -e '\t"   to GECKOBOOT\\n"'
+echo -e '\t"4. Eject/unmount"'
+echo -e '\t"   GECKOBOOT";'
+echo
+
+
+for ((i=0; i < N; i++)); do
+  e=${sorted[$i]}
+  echo "static const char event$i[] ="
+  LC_TIME='C' printf '\t"%(%A)T\\n"\n' "${tstart[$e]}"
+  printf '\t"%(%H:%M)T-%(%H:%M)T\\n"\n' "${tstart[$e]}" "${tend[$e]}"
+  printf '\t"%s";\n' "${summary[$e]}"
+  echo
+done
+
+lday=
+echo "static const char *const column0[] = {"
+echo -e '\twelcome,'
+echo -e '\tauthors,'
+echo -e '\tonline,'
+echo -e '\tcode,'
+for ((i=0; i < N; i++)); do
+  e=${sorted[$i]}
+  day=$(($(printf '%(%d)T' "${tstart[$e]}")-21))
+  if [[ $day -ne $lday ]]; then
+    echo '};'
+    echo "static const char *const column$day[] = {"
+    lday="$day"
+  fi
+  echo -e "\tevent$i,"
+done
+echo '};'
+echo
+
+echo 'static const struct {'
+echo -e '\tconst char *const *const strings;'
+echo -e '\tsize_t len;'
+echo -e '} columns[] = {'
+for ((i=0; i <= day; i++)); do
+  echo -e "\\t{ column$i, ARRAY_SIZE(column$i) },"
+done
+echo '};'
+
+# vim: set ts=2 sw=2 et:

@@ -28,6 +28,7 @@
 #include "lib/i2c0.c"
 
 #include "font8x8.c"
+#include "events.c"
 
 static struct {
 	const uint8_t *data;
@@ -667,8 +668,8 @@ enter_em4(void)
 void __noreturn
 main(void)
 {
-	unsigned int i = 0;
-	unsigned int rgb[3] = { 0, 0, 0 };
+	unsigned int x = 0;
+	unsigned int y = 0;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -700,10 +701,6 @@ main(void)
 	display_update(&dp);
 	display_on(&dp);
 
-	/* initialize RGB diode */
-	rgb_init();
-	rgb_on();
-
 	/* make sure the POWER button is released */
 	while (!gpio_in(GPIO_PC4))
 		msleep(50);
@@ -716,36 +713,28 @@ main(void)
 		switch (event_pop()) {
 		case EVENT_LAST:
 			display_clear(&dp);
-			printf("\n\n"
-					"    Bornhack\n"
-					" Make Tradition\n"
-					"      2017\n"
-					"   bornhack.dk\n"
-					"    %2d %2d %2d\n"
-					"    %cR %cG %cB",
-					rgb[0], rgb[1], rgb[2],
-					(i==0) ? '*' : ' ',
-					(i==1) ? '*' : ' ',
-					(i==2) ? '*' : ' ');
+			display_puts(&dp, columns[y].strings[x]);
 			display_update(&dp);
 			break;
 		case EVENT_BUTTON_A_DOWN:
-			if (i > 0)
-				i--;
+			if (y > 0) {
+				y--;
+				x = 0;
+			}
 			break;
 		case EVENT_BUTTON_B_DOWN:
-			if (i < 2)
-				i++;
+			if (y < ARRAY_SIZE(columns) - 1) {
+				y++;
+				x = 0;
+			}
 			break;
 		case EVENT_BUTTON_X_DOWN:
-			if (rgb[i] > 0)
-				rgb[i]--;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
+			if (x < columns[y].len - 1)
+				x++;
 			break;
 		case EVENT_BUTTON_Y_DOWN:
-			if (rgb[i] < RGB_STEPS-1)
-				rgb[i]++;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
+			if (x > 0)
+				x--;
 			break;
 		case EVENT_BUTTON_POWER_UP:
 			NVIC_DisableIRQ(RTC_IRQn);
