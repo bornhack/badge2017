@@ -1,14 +1,27 @@
 # Bornhack Badge 2017
 
-## About
+## About the hardware
+
+The Bornhack 2017 badge is based around a SiLabs Happy Gecko microcontroller,
+an OLED graphical display, a few buttons and a USB interface.
+
+The microcontroller is a Cortex-M0+ with built in USB, specifically we are using
+the EFM32HG322F64G and one of the 128x64 pixels OLED displays with an SSD1306
+controller.
+
+We have separated the hardware design files from the code and put them in the
+[hardware branch](https://github.com/bornhack/badge2017/tree/hardware) for you
+to have a look at and build on.
+
+## About the code
 
 This repo is meant as a starting point for developing your own code
 for the Bornhack 2017 badge.
 
 Although *main.c* is quite long it is not meant to scare you. Rather it is
-meant to show in all its gory details how to actually program microchips
+meant to show in all its glory details how to actually program microcontrollers
 that doesn't run any operating system without hiding anything behind
-and thick API. However to make things readable it does make use of the
+a thick API. However to make things readable it does make use of the
 [geckonator][] library. This is a very thin wrapper around the registers
 of the Happy Gecko chip on the badge. It allows us to write something like
 ```c
