@@ -19,7 +19,7 @@ This repo is meant as a starting point for developing your own code
 for the Bornhack 2017 badge.
 
 Although *main.c* is quite long it is not meant to scare you. Rather it is
-meant to show in all its glory details how to actually program microcontrollers
+meant to show in all its gory details how to actually program microcontrollers
 that doesn't run any operating system without hiding anything behind
 a thick API. However to make things readable it does make use of the
 [geckonator][] library. This is a very thin wrapper around the registers
