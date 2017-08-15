@@ -104,7 +104,7 @@ cd badge2017
 ```
 
 Otherwise you can download a tarball or zip file from
-[https://github.com/bornhack/badge2017]()
+[https://github.com/bornhack/badge2017](https://github.com/bornhack/badge2017)
 
 ### 3. Build the code
 Simply type `make` in the downloaded directory.
