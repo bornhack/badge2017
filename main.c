@@ -562,12 +562,12 @@ static const struct {
 	{ GPIO_PA9,  1, GPIO_MODE_WIREDAND }, /* green LED */
 	{ GPIO_PA10, 1, GPIO_MODE_WIREDAND }, /* blue  LED */
 	{ GPIO_PC4,  1, GPIO_MODE_INPUTPULLFILTER }, /* POWER button */
+	{ GPIO_PE10, 1, GPIO_MODE_INPUTPULLFILTER }, /* Y button */
+	{ GPIO_PE11, 1, GPIO_MODE_INPUTPULLFILTER }, /* X button */
 	{ GPIO_PE12, 1, GPIO_MODE_WIREDAND }, /* I2C0 SDA */
 	{ GPIO_PE13, 1, GPIO_MODE_WIREDAND }, /* I2C0 SCL */
 	{ GPIO_PF2,  1, GPIO_MODE_INPUTPULLFILTER }, /* A button */
 	{ GPIO_PF3,  1, GPIO_MODE_INPUTPULLFILTER }, /* B button */
-	{ GPIO_PE10, 1, GPIO_MODE_INPUTPULLFILTER }, /* X button */
-	{ GPIO_PE11, 1, GPIO_MODE_INPUTPULLFILTER }, /* Y button */
 };
 
 static void
