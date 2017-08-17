@@ -10,8 +10,15 @@ the EFM32HG322F64G and one of the 128x64 pixels OLED displays with an SSD1306
 controller.
 
 We have separated the hardware design files from the code and put them in the
-[hardware branch](https://github.com/bornhack/badge2017/tree/hardware) for you
-to have a look at and build on.
+[hardware branch][hardware] for you to have a look at and build on.
+
+You can download the microcontroller [reference manual][manual] and
+[datasheet][] directly from [SiliconLabs][silabs].
+
+[hardware]: https://github.com/bornhack/badge2017/tree/hardware
+[silabs]: https://www.silabs.com/
+[manual]: https://www.silabs.com/documents/public/reference-manuals/EFM32HG-RM.pdf
+[datasheet]: https://www.silabs.com/documents/public/data-sheets/EFM32HG322.pdf
 
 ## About the code
 
