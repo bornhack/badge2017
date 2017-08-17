@@ -60,11 +60,10 @@ to below 0.3V caused by the press of a button.
 URL to be announced..
 
 1. Click the "Download binary" button to download the compiled code.
-2. Rename the downloaded file to `code.bin`.
-3. Connect the USB cable to the board and your computer.
-4. Press the **BOOT** button on the badge.
-5. Copy the downloaded `code.bin` to the `GECKOBOOT` USB stick that appeared on your computer.
-6. Eject (or unmount) the USB stick, and watch your code run.
+2. Connect the USB cable to the board and your computer.
+3. Press the **BOOT** button on the badge.
+4. Copy the downloaded `.bin`-file to the `GECKOBOOT` USB stick that appeared on your computer.
+5. Eject (or unmount) the USB stick, and watch your code run.
 
 ## Develop software locally
 
