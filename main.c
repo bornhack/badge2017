@@ -43,15 +43,15 @@ I2C0_IRQHandler(void)
 	i2c0_flags_clear(flags);
 
 	if (i2c0_flag_nack(flags)) {
-		i2c0.ret = -1;
-		i2c0_stop();
-		i2c0_abort();
 		i2c0_flag_tx_buffer_level_disable();
+		i2c0_stop();
+		i2c0_clear_tx();
+		i2c0.len = 1;
 		return;
 	}
 
 	if (i2c0_flag_master_stop(flags)) {
-		i2c0.ret = 0;
+		i2c0.ret = -i2c0.len;
 		return;
 	}
 
@@ -62,8 +62,8 @@ I2C0_IRQHandler(void)
 			i2c0_txdata(*i2c0.data++);
 			i2c0.len = len - 1;
 		} else {
-			i2c0_stop();
 			i2c0_flag_tx_buffer_level_disable();
+			i2c0_stop();
 		}
 	}
 }
