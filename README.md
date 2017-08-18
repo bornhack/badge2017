@@ -76,7 +76,7 @@ pacman -S arm-none-eabi-gcc arm-none-eabi-newlib make
 
 ##### Debian/Ubuntu
 ```sh
-apt-get install arm-none-eabi-gcc libnewlib-arm-none-eabi make
+apt-get install gcc-arm-none-eabi libnewlib-arm-none-eabi make
 ```
 Unfortunately the toolchain in Ubuntu Trusty 14.04 is too old to work out of the box.
 
