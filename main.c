@@ -428,6 +428,7 @@ struct button {
 	uint8_t event;
 	uint8_t repeat;
 	uint16_t delay;
+	uint16_t delay_left;
 };
 
 static void
@@ -435,10 +436,20 @@ button_callback(struct plist_node *n)
 {
 	struct button *b = (struct button *)n;
 
+	if (b->delay_left > 50)
+		b->delay_left -= 50;
+	else
+		b->delay_left = 0;
+
 	if (gpio_in(b->pin)) {
 		event_push(b->event+1);
 		gpio_flag_clear(b->pin);
 		gpio_flag_enable(b->pin);
+	} else if (b->delay_left > 0) {
+		if (b->delay_left > 50)
+			plist_add(&b->n, 50);
+		else
+			plist_add(&b->n, b->delay_left);
 	} else if (b->repeat > 0) {
 		event_push(b->event);
 		plist_add(&b->n, b->repeat);
@@ -451,20 +462,24 @@ button_firstclick(struct button *b)
 {
 	gpio_flag_disable(b->pin);
 	event_push(b->event);
-	plist_add(&b->n, b->delay);
+	b->delay_left = b->delay;
+	if (b->delay_left > 50)
+		plist_add(&b->n, 50);
+	else
+		plist_add(&b->n, b->delay_left);
 }
 
 static struct button buttons[] = {
 	{ .n.fn = button_callback, .pin = GPIO_PF2,  .event = EVENT_BUTTON_A_DOWN,
-		.delay = 250, .repeat = 80 },
+		.delay = 350, .repeat = 80 },
 	{ .n.fn = button_callback, .pin = GPIO_PF3,  .event = EVENT_BUTTON_B_DOWN,
-		.delay = 250, .repeat = 80 },
+		.delay = 350, .repeat = 80 },
 	{ .n.fn = button_callback, .pin = GPIO_PE11, .event = EVENT_BUTTON_X_DOWN,
-		.delay = 250, .repeat = 80 },
+		.delay = 350, .repeat = 80 },
 	{ .n.fn = button_callback, .pin = GPIO_PE10, .event = EVENT_BUTTON_Y_DOWN,
-		.delay = 250, .repeat = 80 },
+		.delay = 350, .repeat = 80 },
 	{ .n.fn = button_callback, .pin = GPIO_PC4,  .event = EVENT_BUTTON_POWER_DOWN,
-		.delay = 250, .repeat = 0 },
+		.delay = 50, .repeat = 0 },
 };
 
 void
