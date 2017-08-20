@@ -88,6 +88,12 @@ i2c0_write(const uint8_t *ptr, size_t len)
 struct display {
 	uint8_t tx;
 	uint8_t ty;
+	/* reset holds the pre-ample to send the display
+	 * controller before sending the databits in the
+	 * frame buffer. must be placed just before
+	 * the framebuffer, so we can just send all bytes
+	 * starting from reset and continuing into
+	 * the frame buffer. */
 	uint8_t reset[8];
 	uint8_t framebuf[128 * 64 / 8];
 };
@@ -191,6 +197,7 @@ display_clear(struct display *dp)
 	memset(dp->framebuf, 0, sizeof(dp->framebuf));
 }
 
+/* set a single pixel in the frame buffer */
 static void __unused
 display_set(struct display *dp, unsigned int x, unsigned int y)
 {
@@ -210,7 +217,6 @@ display_text_location(struct display *dp, uint8_t x, uint8_t y)
 static void __unused
 display_write(struct display *dp, const uint8_t *ptr, size_t len)
 {
-
 	for (; len; len--) {
 		const uint8_t *glyph;
 		const uint8_t *glyph_end;
@@ -256,6 +262,8 @@ display_puts(struct display *dp, const char *str)
 	display_write(dp, (const uint8_t *)str, strlen(str));
 }
 
+/* this function is called by newlib's stdio implementation
+ * (eg. printf) and must be public */
 ssize_t
 _write(int fd, const uint8_t *ptr, size_t len)
 {
@@ -265,7 +273,9 @@ _write(int fd, const uint8_t *ptr, size_t len)
 	return len;
 }
 
+/* the rtc is a 24bit counter */
 #define RTC_MASK 0xFFFFFFU
+
 static inline uint32_t
 rtc_lessthan(uint32_t a, uint32_t b)
 {
