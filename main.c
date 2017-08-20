@@ -69,7 +69,7 @@ I2C0_IRQHandler(void)
 }
 
 static int
-i2c0__write(const uint8_t *ptr, size_t len)
+i2c0_write(const uint8_t *ptr, size_t len)
 {
 	int ret;
 
@@ -84,7 +84,6 @@ i2c0__write(const uint8_t *ptr, size_t len)
 	emu_em2_unblock();
 	return ret;
 }
-#define i2c0_write(x) i2c0__write(x, sizeof(x))
 
 struct display {
 	uint8_t tx;
@@ -140,7 +139,7 @@ display_init(struct display *dp)
 	dp->reset[5] = 0x80; /* next byte is control                */
 	dp->reset[6] = 0xB0, /* set page address = 0                */
 	dp->reset[7] = 0x40; /* the remaining bytes are data bytes  */
-	return i2c0_write(display_init_data);
+	return i2c0_write(display_init_data, sizeof(display_init_data));
 }
 
 static int __unused
@@ -151,7 +150,7 @@ display_off(struct display *dp)
 		0x00, /* Co = 0, D/C = 0: the rest is command bytes           */
 		0xAE, /* display off                                          */
 	};
-	return i2c0_write(data);
+	return i2c0_write(data, sizeof(data));
 };
 
 static int __unused
@@ -162,7 +161,7 @@ display_on(struct display *dp)
 		0x00, /* Co = 0, D/C = 0: the rest is command bytes           */
 		0xAF, /* display on                                           */
 	};
-	return i2c0_write(data);
+	return i2c0_write(data, sizeof(data));
 };
 
 static int __unused
@@ -175,13 +174,13 @@ display_contrast(struct display *dp, uint8_t val)
 	data[2] = 0x81; /* set contrast                               */
 	data[3] = val;
 
-	return i2c0_write(data);
+	return i2c0_write(data, sizeof(data));
 };
 
 static int
 display_update(struct display *dp)
 {
-	return i2c0__write(dp->reset, sizeof(dp->reset) + sizeof(dp->framebuf));
+	return i2c0_write(dp->reset, sizeof(dp->reset) + sizeof(dp->framebuf));
 }
 
 static void __unused
