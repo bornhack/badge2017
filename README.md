@@ -57,7 +57,9 @@ to below 0.3V caused by the press of a button.
 
 ## Develop software online
 
-URL to be announced..
+Go to [badge.xil.se](https://badge.xil.se/), click "All Projects" and choose
+the official example. Start hacking. Once your code compiles this is how you program
+your badge:
 
 1. Click the "Download binary" button to download the compiled code.
 2. Connect the USB cable to the board and your computer.
