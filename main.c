@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lib/clock.c"
 #include "lib/emu.c"
@@ -204,7 +205,18 @@ display_set(struct display *dp, unsigned int x, unsigned int y)
 	unsigned int idx = 8*x + y/8;
 	uint8_t mask = 1 << (y & 0x7U);
 
-	dp->framebuf[idx] |= mask;
+	dp->framebuf[idx] ^= mask;
+}
+
+
+/* get a single pixel in the frame buffer */
+static char
+display_get(struct display *dp, unsigned int x, unsigned int y)
+{
+        unsigned int idx = 8*x + y/8;
+        uint8_t mask = 1 << (y & 0x7U);
+
+        return dp->framebuf[idx] & mask;
 }
 
 static void __unused
@@ -381,6 +393,7 @@ enum event {
 	EVENT_BUTTON_Y_UP,
 	EVENT_BUTTON_POWER_DOWN,
 	EVENT_BUTTON_POWER_UP,
+	EVENT_NOTHING,
 };
 
 static struct {
@@ -412,18 +425,12 @@ event_pop(void)
 	unsigned int first = events.first;
 	enum event ev;
 
-	if (first == events.last && !events.empty) {
-		events.empty = true;
-		return EVENT_LAST;
+	if (first == events.last) {
+		return EVENT_NOTHING;
 	}
 
-	while (first == events.last)
-		__WFI();
-
-	if (events.empty) {
-		events.empty = false;
-		return EVENT_FIRST;
-	}
+//	while (first == events.last)
+//		__WFI();
 
 	ev = events.queue[first++];
 	events.first = first % ARRAY_SIZE(events.queue);
@@ -664,101 +671,227 @@ enter_em4(void)
 	emu_em4_enter();
 }
 
+static void
+init(void)
+{
+        /* auxhfrco is only needed when programming flash */
+        clock_auxhfrco_disable();
+
+        /* enable low-energy clock and configure low-frequency clocks */
+        clock_le_enable();
+        clock_lf_config(CLOCK_LFA_ULFRCO | CLOCK_LFB_DISABLED | CLOCK_LFC_DISABLED);
+        clock_rtc_div1();
+        clock_rtc_enable();
+        while (clock_lf_syncbusy())
+                /* wait */;
+
+        /* enable rtc */
+        NVIC_SetPriority(RTC_IRQn, 2);
+        NVIC_EnableIRQ(RTC_IRQn);
+        rtc_config(RTC_ENABLE);
+
+        /* enable and configure GPIOs */
+        gpio_init();
+
+        /* initialize i2c for display */
+        i2c0_init();
+
+        /* don't buffer stdout */
+        setbuf(stdout, NULL);
+
+        /* initialize and turn on display */
+        display_init(&dp);
+        display_update(&dp);
+        display_on(&dp);
+
+        /* initialize RGB diode */
+        rgb_init();
+        rgb_on();
+
+        /* make sure the POWER button is released */
+        while (!gpio_in(GPIO_PC4))
+                msleep(50);
+        msleep(10);
+
+        /* now we can start listening for button presses */
+        buttons_init();
+}
+
+
+
+
+struct pos {
+	char x,
+	     y;
+};
+
+static struct pos getRandomPos(){
+	short x, y;
+	struct pos point;
+
+	while (1){
+		x = rand() % 64;
+		y = rand() % 128;
+		if (!display_get(&dp, y, x))
+			break;
+	}
+
+	point.x = x;
+	point.y = y;
+	return point;
+}
+
+static void lost(unsigned short len){
+	rgb_set(RGB_STEPS-1, 0, 0);
+	printf("Score: %hu", len);
+	msleep(1000);
+	rgb_set(0, 0, 0);
+}
+
+
 void __noreturn
 main(void)
 {
-	unsigned int i = 0;
+	init();
+
+	unsigned short i = 0, k = 0, sleeptime = 310, 
+		len = 5, skip = 0, finished = 0;
 	unsigned int rgb[3] = { 0, 0, 0 };
+	char direction = 'd';
+	struct pos path[256];
+        struct pos point;
 
-	/* auxhfrco is only needed when programming flash */
-	clock_auxhfrco_disable();
+	display_clear(&dp);
+	display_text_location(&dp, 2, 3);
 
-	/* enable low-energy clock and configure low-frequency clocks */
-	clock_le_enable();
-	clock_lf_config(CLOCK_LFA_ULFRCO | CLOCK_LFB_DISABLED | CLOCK_LFC_DISABLED);
-	clock_rtc_div1();
-	clock_rtc_enable();
-	while (clock_lf_syncbusy())
-		/* wait */;
+	// Draw edges
+	for (i=0; i < 128; i++){
+		display_set(&dp, i, 0);
+		display_set(&dp, i, 63);
+	}
 
-	/* enable rtc */
-	NVIC_SetPriority(RTC_IRQn, 2);
-	NVIC_EnableIRQ(RTC_IRQn);
-	rtc_config(RTC_ENABLE);
+        for (i=1; i < 63; i++){
+                display_set(&dp, 0, i);
+                display_set(&dp, 127, i);
+        }
 
-	/* enable and configure GPIOs */
-	gpio_init();
+	// start position
+	unsigned short currentX = 10,
+		       currentY = 10,
+		       last = 0;
 
-	/* initialize i2c for display */
-	i2c0_init();
+	// '4' Guaranteed to be randomly -- chosen by fair dice
+        srand(4);
 
-	/* don't buffer stdout */
-	setbuf(stdout, NULL);
-
-	/* initialize and turn on display */
-	display_init(&dp);
+	point.x = 17;
+	point.y = 17;
+	display_set(&dp, point.y, point.x);
+	
 	display_update(&dp);
-	display_on(&dp);
 
-	/* initialize RGB diode */
-	rgb_init();
-	rgb_on();
-
-	/* make sure the POWER button is released */
-	while (!gpio_in(GPIO_PC4))
-		msleep(50);
-	msleep(10);
-
-	/* now we can start listening for button presses */
-	buttons_init();
-
+	i = 0;
 	while (1) {
-		switch (event_pop()) {
-		case EVENT_LAST:
-			display_clear(&dp);
-			printf("\n\n"
-					"    Bornhack\n"
-					" Make Tradition\n"
-					"      2017\n"
-					"   bornhack.dk\n"
-					"    %2d %2d %2d\n"
-					"    %cR %cG %cB",
-					rgb[0], rgb[1], rgb[2],
-					(i==0) ? '*' : ' ',
-					(i==1) ? '*' : ' ',
-					(i==2) ? '*' : ' ');
-			display_update(&dp);
-			break;
-		case EVENT_BUTTON_A_DOWN:
-			if (i > 0)
-				i--;
-			break;
-		case EVENT_BUTTON_B_DOWN:
-			if (i < 2)
-				i++;
-			break;
-		case EVENT_BUTTON_X_DOWN:
-			if (rgb[i] > 0)
-				rgb[i]--;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
-			break;
-		case EVENT_BUTTON_Y_DOWN:
-			if (rgb[i] < RGB_STEPS-1)
-				rgb[i]++;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
-			break;
-		case EVENT_BUTTON_POWER_UP:
-			NVIC_DisableIRQ(RTC_IRQn);
-			NVIC_DisableIRQ(GPIO_EVEN_IRQn);
-			NVIC_DisableIRQ(GPIO_ODD_IRQn);
-
-			display_off(&dp);
-			gpio_uninit();
-			enter_em4();
-			break;
-		default:
-			/* do nothing */
-			break;
+/*		// Blink on each 'tic'
+		if (rgb[0] == RGB_STEPS-1) {
+			rgb[0] = 0;
+		} else {
+			rgb[0] = RGB_STEPS-1;
 		}
+		rgb_set(rgb[0], rgb[1], rgb[2]);
+*/
+
+
+		switch (event_pop()) {
+                case EVENT_BUTTON_A_DOWN:
+			if (direction != 'r')
+                        	direction = 'l';
+                        break;
+                case EVENT_BUTTON_B_DOWN:
+			if (direction != 'l')
+                        	direction = 'r';
+                        break;
+                case EVENT_BUTTON_X_DOWN:
+			if (direction != 'u')
+                        	direction = 'd';
+                        break;
+                case EVENT_BUTTON_Y_DOWN:
+			if (direction != 'd')
+                        	direction = 'u';
+                        break;
+                case EVENT_BUTTON_POWER_UP:
+                        NVIC_DisableIRQ(RTC_IRQn);
+                        NVIC_DisableIRQ(GPIO_EVEN_IRQn);
+                        NVIC_DisableIRQ(GPIO_ODD_IRQn);
+
+                        display_off(&dp);
+                        gpio_uninit();
+                        enter_em4();
+                        break;
+                default:
+                        // do nothing
+                        break;
+                }
+
+		if (finished) {
+			msleep(10);
+			// wait for interrupt
+			__WFI();
+			continue;
+		}
+
+
+		if (direction == 'd'){
+			++currentX;
+		} else if (direction == 'u'){
+			--currentX;
+		} else if (direction == 'l'){
+			--currentY;
+		} else if (direction == 'r'){
+			++currentY;
+		}
+
+		path[i].x = currentX;
+		path[i].y = currentY;
+                i = (i + 1) % ARRAY_SIZE(path);
+
+
+		// When we should start deleting the last elemnt of the snake
+		if (k > 5 && !skip) {
+			display_set(&dp, path[last].y, path[last].x);
+			last = (last + 1) % ARRAY_SIZE(path);
+		} else {
+			skip = 0;
+			k++;
+		}
+
+		// Did we eat a point?
+		if (currentX == point.x && currentY == point.y){
+			len += 1;
+			skip = 1;
+			sleeptime = sleeptime - sleeptime / 4;
+			
+			// Get net point, and put on map
+			point = getRandomPos();
+	                display_set(&dp, point.y, point.x);
+		} else if (display_get(&dp, currentY, currentX)){
+			// Did we hit ourself?
+			finished = 1;
+			lost(len);
+                } else {
+			display_set(&dp, currentY, currentX);
+		}
+
+                display_update(&dp);
+
+
+		// Did we hit the wall?
+		if (currentY == 127 || currentY == 0 || currentX == 0 || currentX == 63){
+			finished = 1;
+			lost(len);
+		}
+
+
+		msleep(sleeptime);
+
 	}
 }
