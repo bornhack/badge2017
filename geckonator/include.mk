@@ -21,6 +21,7 @@ NAME       = code
 OUTDIR     = out
 DESTDIR    = .
 CHIP       = EFM32HG309F64
+DFU_DEVICE = -d ,0483:df11
 
 ifeq ($(patsubst %F64,,$(CHIP)),)
 FLASH      = 64K
@@ -157,7 +158,7 @@ flash: $(OUTDIR)/$(NAME).elf
 	$(OPENOCD) -c 'set CPUTAPID 0x0bc11477' -f interface/stlink-v2.cfg -f target/efm32.cfg -c 'init; program $< verify reset exit;'
 
 dfu: $(OUTDIR)/$(NAME).bin
-	$(DFU_UTIL) -R -D '$<'
+	$(DFU_UTIL) $(DFU_DEVICE) -R -D '$<'
 
 sdk:
 	$(MKDIR_P) SiliconLabs
