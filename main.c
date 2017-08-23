@@ -381,6 +381,7 @@ enum event {
 	EVENT_BUTTON_Y_UP,
 	EVENT_BUTTON_POWER_DOWN,
 	EVENT_BUTTON_POWER_UP,
+	EVENT_TICK500,
 };
 
 static struct {
@@ -429,6 +430,38 @@ event_pop(void)
 	events.first = first % ARRAY_SIZE(events.queue);
 
 	return ev;
+}
+
+struct ticker_data {
+	struct plist_node n;
+	enum event event;
+	unsigned int delay;
+};
+
+static void
+ticker_callback(struct plist_node *n)
+{
+	struct ticker_data *d = (struct ticker_data *)n;
+
+	if (d->delay > 0) {
+		event_push(d->event);
+		plist_add(n, d->delay);
+	}
+}
+
+static void __unused
+ticker_run(struct ticker_data *d, enum event event, unsigned int delay)
+{
+	d->n.fn = ticker_callback;
+	d->event = event;
+	d->delay = delay;
+	plist_add(&d->n, delay);
+}
+
+static void __unused
+ticker_stop(struct ticker_data *d)
+{
+	d->delay = 0;
 }
 
 struct button {
@@ -669,6 +702,8 @@ main(void)
 {
 	unsigned int i = 0;
 	unsigned int rgb[3] = { 0, 0, 0 };
+	struct ticker_data tick500;
+	bool rgb_enabled;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -703,6 +738,7 @@ main(void)
 	/* initialize RGB diode */
 	rgb_init();
 	rgb_on();
+	rgb_enabled = true;
 
 	/* make sure the POWER button is released */
 	while (!gpio_in(GPIO_PC4))
@@ -711,6 +747,8 @@ main(void)
 
 	/* now we can start listening for button presses */
 	buttons_init();
+
+	ticker_run(&tick500, EVENT_TICK500, 500);
 
 	while (1) {
 		switch (event_pop()) {
@@ -728,6 +766,15 @@ main(void)
 					(i==1) ? '*' : ' ',
 					(i==2) ? '*' : ' ');
 			display_update(&dp);
+			break;
+		case EVENT_TICK500:
+			if (rgb_enabled) {
+				rgb_off();
+				rgb_enabled = false;
+			} else {
+				rgb_on();
+				rgb_enabled = true;
+			}
 			break;
 		case EVENT_BUTTON_A_DOWN:
 			if (i > 0)
