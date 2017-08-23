@@ -122,3 +122,18 @@ try editing the `Makefile` and uncommenting the line which says `OLD=1`.
 If there are no compilation errors this will result in a `code.bin` in the `out` directory.
 
 [arm-toolchain]: https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads
+
+### 4. Program the badge with your compiled code
+
+###### Option 1
+
+Proceed as above, but instead of downloading your `.bin`-file use the `out/code.bin` you
+just generated above.
+
+###### Option 2
+
+Alternatively you can install a program called *dfu-util*. With this program installed
+you can simply put the badge in bootloader mode by pressing the **BOOT** button,
+and then type `make dfu`. Usually your dfu-util package comes with rules to give
+your user (and hence dfu-util) access to the raw USB device. If not you might need
+`sudo make dfu`.
