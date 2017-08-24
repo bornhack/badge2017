@@ -28,6 +28,7 @@
 #include "lib/i2c0.c"
 
 #include "font8x8.c"
+#include "logo.c"
 
 static struct {
 	const uint8_t *data;
@@ -212,6 +213,25 @@ display_text_location(struct display *dp, uint8_t x, uint8_t y)
 {
 	dp->tx = x;
 	dp->ty = y;
+}
+
+static void __unused
+display_stuff(struct display *dp)
+{
+	const unsigned int pixel_count = gimp_image.width * gimp_image.height;
+
+	for(unsigned int i = 0; i < pixel_count; i++) {
+		char pixel = gimp_image.pixel_data[i * 3];
+		if(pixel != 0) {
+			display_set(dp, dp->tx, dp->ty);
+		}
+
+		dp->tx++;
+		if (dp->tx == gimp_image.width) {
+			dp->tx = 0;
+			dp->ty++;
+		}
+	}
 }
 
 static void __unused
@@ -754,6 +774,8 @@ main(void)
 		switch (event_pop()) {
 		case EVENT_LAST:
 			display_clear(&dp);
+			display_stuff(&dp);
+			/*
 			printf("\n\n"
 					"    Bornhack\n"
 					" Make Tradition\n"
@@ -765,6 +787,7 @@ main(void)
 					(i==0) ? '*' : ' ',
 					(i==1) ? '*' : ' ',
 					(i==2) ? '*' : ' ');
+			//*/
 			display_update(&dp);
 			break;
 		case EVENT_TICK500:
