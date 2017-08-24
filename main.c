@@ -28,7 +28,7 @@
 #include "lib/i2c0.c"
 
 #include "font8x8.c"
-#include "logo.c"
+#include "images.c"
 
 static struct {
 	const uint8_t *data;
@@ -216,18 +216,18 @@ display_text_location(struct display *dp, uint8_t x, uint8_t y)
 }
 
 static void __unused
-display_stuff(struct display *dp)
+display_image(struct display *dp, const image *img)
 {
-	const unsigned int pixel_count = gimp_image.width * gimp_image.height;
+	const unsigned int pixel_count = img->width * img->height;
 
 	for(unsigned int i = 0; i < pixel_count; i++) {
-		char pixel = gimp_image.pixel_data[i * 3];
+		char pixel = img->pixel_data[i * 3];
 		if(pixel != 0) {
 			display_set(dp, dp->tx, dp->ty);
 		}
 
 		dp->tx++;
-		if (dp->tx == gimp_image.width) {
+		if (dp->tx == img->width) {
 			dp->tx = 0;
 			dp->ty++;
 		}
@@ -774,20 +774,7 @@ main(void)
 		switch (event_pop()) {
 		case EVENT_LAST:
 			display_clear(&dp);
-			display_stuff(&dp);
-			/*
-			printf("\n\n"
-					"    Bornhack\n"
-					" Make Tradition\n"
-					"      2017\n"
-					"   bornhack.dk\n"
-					"    %2d %2d %2d\n"
-					"    %cR %cG %cB",
-					rgb[0], rgb[1], rgb[2],
-					(i==0) ? '*' : ' ',
-					(i==1) ? '*' : ' ',
-					(i==2) ? '*' : ' ');
-			//*/
+			display_image(&dp, images[1]);
 			display_update(&dp);
 			break;
 		case EVENT_TICK500:
