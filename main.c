@@ -221,7 +221,7 @@ display_image(struct display *dp, const image *img)
 	const unsigned int pixel_count = img->width * img->height;
 
 	for(unsigned int i = 0; i < pixel_count; i++) {
-		char pixel = img->pixel_data[i * 3];
+		char pixel = img->pixel_data[i * img->bytes_per_pixel];
 		if(pixel != 0) {
 			display_set(dp, dp->tx, dp->ty);
 		}
@@ -721,9 +721,7 @@ void __noreturn
 main(void)
 {
 	unsigned int i = 0;
-	unsigned int rgb[3] = { 0, 0, 0 };
 	struct ticker_data tick500;
-	bool rgb_enabled;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -755,11 +753,6 @@ main(void)
 	display_update(&dp);
 	display_on(&dp);
 
-	/* initialize RGB diode */
-	rgb_init();
-	rgb_on();
-	rgb_enabled = true;
-
 	/* make sure the POWER button is released */
 	while (!gpio_in(GPIO_PC4))
 		msleep(50);
@@ -774,35 +767,18 @@ main(void)
 		switch (event_pop()) {
 		case EVENT_LAST:
 			display_clear(&dp);
-			display_image(&dp, images[1]);
+			display_image(&dp, images[i]);
 			display_update(&dp);
 			break;
 		case EVENT_TICK500:
-			if (rgb_enabled) {
-				rgb_off();
-				rgb_enabled = false;
-			} else {
-				rgb_on();
-				rgb_enabled = true;
-			}
-			break;
 		case EVENT_BUTTON_A_DOWN:
-			if (i > 0)
-				i--;
-			break;
 		case EVENT_BUTTON_B_DOWN:
-			if (i < 2)
-				i++;
-			break;
 		case EVENT_BUTTON_X_DOWN:
-			if (rgb[i] > 0)
-				rgb[i]--;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
-			break;
 		case EVENT_BUTTON_Y_DOWN:
-			if (rgb[i] < RGB_STEPS-1)
-				rgb[i]++;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
+			i++;
+			if(i >= 2){
+				i = 0;
+			}
 			break;
 		case EVENT_BUTTON_POWER_UP:
 			NVIC_DisableIRQ(RTC_IRQn);
