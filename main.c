@@ -27,8 +27,8 @@
 #include "lib/timer2.c"
 #include "lib/i2c0.c"
 
-#include "font8x8.c"
-#include "images.c"
+#include "./images/images.c"
+#include "./display.c"
 
 static struct {
 	const uint8_t *data;
@@ -86,20 +86,7 @@ i2c0_write(const uint8_t *ptr, size_t len)
 	return ret;
 }
 
-struct display {
-	uint8_t tx;
-	uint8_t ty;
-	/* reset holds the pre-ample to send the display
-	 * controller before sending the databits in the
-	 * frame buffer. must be placed just before
-	 * the framebuffer, so we can just send all bytes
-	 * starting from reset and continuing into
-	 * the frame buffer. */
-	uint8_t reset[8];
-	uint8_t framebuf[128 * 64 / 8];
-};
-
-static struct display dp;
+static display dp;
 
 static const uint8_t display_init_data[] = {
 	0x78, /* I2C address, write                                   */
@@ -135,9 +122,9 @@ static const uint8_t display_init_data[] = {
 };
 
 static int
-display_init(struct display *dp)
+display_init(display *dp)
 {
-	memset(dp, 0, sizeof(struct display));
+	memset(dp, 0, sizeof(display));
 	dp->reset[0] = 0x78; /* address                             */
 	dp->reset[1] = 0x80; /* next byte is control                */
 	dp->reset[2] = 0x00; /* set higher column start address = 0 */
@@ -150,7 +137,7 @@ display_init(struct display *dp)
 }
 
 static int __unused
-display_off(struct display *dp)
+display_off(display *dp)
 {
 	static const uint8_t data[] = {
 		0x78, /* I2C address, write                                   */
@@ -161,7 +148,7 @@ display_off(struct display *dp)
 };
 
 static int __unused
-display_on(struct display *dp)
+display_on(display *dp)
 {
 	static const uint8_t data[] = {
 		0x78, /* I2C address, write                                   */
@@ -172,7 +159,7 @@ display_on(struct display *dp)
 };
 
 static int __unused
-display_contrast(struct display *dp, uint8_t val)
+display_contrast(display *dp, uint8_t val)
 {
 	uint8_t data[4];
 
@@ -185,101 +172,16 @@ display_contrast(struct display *dp, uint8_t val)
 };
 
 static int
-display_update(struct display *dp)
+display_update(display *dp)
 {
 	return i2c0_write(dp->reset, sizeof(dp->reset) + sizeof(dp->framebuf));
 }
 
 static void __unused
-display_clear(struct display *dp)
-{
-	dp->tx = 0;
-	dp->ty = 0;
-	memset(dp->framebuf, 0, sizeof(dp->framebuf));
-}
-
-/* set a single pixel in the frame buffer */
-static void __unused
-display_set(struct display *dp, unsigned int x, unsigned int y)
-{
-	unsigned int idx = 8*x + y/8;
-	uint8_t mask = 1 << (y & 0x7U);
-
-	dp->framebuf[idx] |= mask;
-}
-
-static void __unused
-display_text_location(struct display *dp, uint8_t x, uint8_t y)
+display_text_location(display *dp, uint8_t x, uint8_t y)
 {
 	dp->tx = x;
 	dp->ty = y;
-}
-
-static void __unused
-display_image(struct display *dp, const image *img)
-{
-	const unsigned int pixel_count = img->width * img->height;
-
-	for(unsigned int i = 0; i < pixel_count; i++) {
-		char pixel = img->pixel_data[i * img->bytes_per_pixel];
-		if(pixel != 0) {
-			display_set(dp, dp->tx, dp->ty);
-		}
-
-		dp->tx++;
-		if (dp->tx == img->width) {
-			dp->tx = 0;
-			dp->ty++;
-		}
-	}
-}
-
-static void __unused
-display_write(struct display *dp, const uint8_t *ptr, size_t len)
-{
-	for (; len; len--) {
-		const uint8_t *glyph;
-		const uint8_t *glyph_end;
-		uint8_t *dest;
-		unsigned int c = *ptr++;
-
-		if (c == '\r') {
-			dp->tx = 0;
-			continue;
-		}
-		if (c == '\n') {
-			dp->tx = 0;
-			goto inc_ty;
-		}
-
-		if (c < 32 || c > 0x7F)
-			c = 0x7F;
-
-		c -= 32;
-
-		glyph = &font8x8[c][0];
-		glyph_end = glyph + 8;
-		dest = &dp->framebuf[dp->ty + 8*8*dp->tx];
-		while (glyph < glyph_end) {
-			*dest |= *glyph++;
-			dest += 8;
-		}
-
-		dp->tx++;
-		if (dp->tx == 16) {
-			dp->tx = 0;
-inc_ty:
-			dp->ty++;
-			if (dp->ty == 8)
-				dp->ty = 0;
-		}
-	}
-}
-
-static void __unused
-display_puts(struct display *dp, const char *str)
-{
-	display_write(dp, (const uint8_t *)str, strlen(str));
 }
 
 /* this function is called by newlib's stdio implementation
