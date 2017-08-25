@@ -2,6 +2,7 @@
 #define _DISPLAY_
 
 #include "font8x8.c"
+#include "./images/image.h"
 
 typedef struct {
 	uint8_t tx;
@@ -16,7 +17,7 @@ typedef struct {
 	uint8_t framebuf[128 * 64 / 8];
 } display;
 
-static void __unused
+static void
 display_clear(display *dp)
 {
 	dp->tx = 0;
@@ -25,7 +26,7 @@ display_clear(display *dp)
 }
 
 /* set a single pixel in the frame buffer */
-static void __unused
+static void
 display_set(display *dp, unsigned int x, unsigned int y)
 {
 	unsigned int idx = 8*x + y/8;
@@ -34,7 +35,7 @@ display_set(display *dp, unsigned int x, unsigned int y)
 	dp->framebuf[idx] |= mask;
 }
 
-static void __unused
+static void
 display_image(display *dp, const image *img)
 {
 	const unsigned int pixel_count = img->width * img->height;
@@ -53,7 +54,7 @@ display_image(display *dp, const image *img)
 	}
 }
 
-static void __unused
+static void
 display_write(display *dp, const uint8_t *ptr, size_t len)
 {
 	for (; len; len--) {
@@ -95,7 +96,7 @@ inc_ty:
 	}
 }
 
-static void __unused
+static void
 display_puts(display *dp, const char *str)
 {
 	display_write(dp, (const uint8_t *)str, strlen(str));

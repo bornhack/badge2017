@@ -27,8 +27,8 @@
 #include "lib/timer2.c"
 #include "lib/i2c0.c"
 
-#include "./images/images.c"
 #include "./display.c"
+#include "./frames.c"
 
 static struct {
 	const uint8_t *data;
@@ -622,7 +622,8 @@ enter_em4(void)
 void __noreturn
 main(void)
 {
-	unsigned int i = 0;
+	size_t currentFrame = 0;
+	size_t frameCount = sizeof(frames) / 1024;
 	struct ticker_data tick500;
 
 	/* auxhfrco is only needed when programming flash */
@@ -663,13 +664,15 @@ main(void)
 	/* now we can start listening for button presses */
 	buttons_init();
 
-	ticker_run(&tick500, EVENT_TICK500, 500);
+	ticker_run(&tick500, EVENT_TICK500, 128);
 
 	while (1) {
 		switch (event_pop()) {
 		case EVENT_LAST:
 			display_clear(&dp);
-			display_image(&dp, images[i]);
+			for(int i = 0; i < 1024; i++){
+				dp.framebuf[i] = frames[currentFrame][i];
+			}
 			display_update(&dp);
 			break;
 		case EVENT_TICK500:
@@ -677,9 +680,9 @@ main(void)
 		case EVENT_BUTTON_B_DOWN:
 		case EVENT_BUTTON_X_DOWN:
 		case EVENT_BUTTON_Y_DOWN:
-			i++;
-			if(i >= 2){
-				i = 0;
+			currentFrame++;
+			if(currentFrame > frameCount){
+				currentFrame = 0;
 			}
 			break;
 		case EVENT_BUTTON_POWER_UP:
