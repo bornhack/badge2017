@@ -26,6 +26,7 @@
 #include "lib/rtc.c"
 #include "lib/timer2.c"
 #include "lib/i2c0.c"
+#include "lib/leuart0.c"
 
 #include "font8x8.c"
 
@@ -83,6 +84,49 @@ i2c0_write(const uint8_t *ptr, size_t len)
 		__WFI();
 	emu_em2_unblock();
 	return ret;
+}
+
+#define LEUART0_ASYNC
+#ifdef LEUART0_ASYNC
+static struct {
+	volatile uint32_t first;
+	volatile uint32_t last;
+	uint8_t buf[1024];
+} leuart0_output;
+
+void
+LEUART0_IRQHandler(void)
+{
+	uint32_t first = leuart0_output.first;
+
+	if (first != leuart0_output.last) {
+		leuart0_txdata(leuart0_output.buf[first++]);
+		leuart0_output.first = first % ARRAY_SIZE(leuart0_output.buf);
+	} else
+		leuart0_flag_tx_buffer_level_disable();
+}
+#endif
+
+static void __unused
+leuart0_write(const uint8_t *ptr, size_t len)
+{
+#ifdef LEUART0_ASYNC
+	uint32_t last = leuart0_output.last;
+
+	for (; len > 0; len--) {
+		leuart0_output.buf[last++] = *ptr++;
+		last %= ARRAY_SIZE(leuart0_output.buf);
+	}
+
+	leuart0_output.last = last;
+	leuart0_flag_tx_buffer_level_enable();
+#else
+	for (; len > 0; len--) {
+		while (!leuart0_tx_buffer_level())
+			/* wait */;
+		leuart0_txdata(*ptr++);
+	}
+#endif
 }
 
 struct display {
@@ -269,6 +313,8 @@ _write(int fd, const uint8_t *ptr, size_t len)
 {
 	if (fd == 1)
 		display_write(&dp, ptr, len);
+	if (fd == 2)
+		leuart0_write(ptr, len);
 
 	return len;
 }
@@ -563,6 +609,23 @@ i2c0_init(void)
 	NVIC_EnableIRQ(I2C0_IRQn);
 }
 
+static void
+leuart0_init(void)
+{
+	leuart0_freeze(); /* freeze low-power registers */
+	leuart0_config(LEUART_CONFIG_8N1);
+	leuart0_clock_div(3632); /* 256*(f/115200 - 1), f = 14MHz / 2 / 4 */
+	leuart0_pins(LEUART_PINS_RXTX0); /* map rx -> PD5, tx -> PD4 */
+	leuart0_rxtx_enable(); /* turn on rx and tx */
+	leuart0_update(); /* update low-power registers */
+	while (leuart0_syncbusy())
+		/* wait */;
+#ifdef LEUART0_ASYNC
+	NVIC_SetPriority(LEUART0_IRQn, 2);
+	NVIC_EnableIRQ(LEUART0_IRQn);
+#endif
+}
+
 static const uint16_t rgb_steps[] = {
 	0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610,
 	987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368
@@ -618,6 +681,8 @@ static const struct {
 	{ GPIO_PA8,  1, GPIO_MODE_WIREDAND }, /* red   LED */
 	{ GPIO_PA9,  1, GPIO_MODE_WIREDAND }, /* green LED */
 	{ GPIO_PA10, 1, GPIO_MODE_WIREDAND }, /* blue  LED */
+	{ GPIO_PD4,  0, GPIO_MODE_PUSHPULL }, /* leuart0 TX */
+	{ GPIO_PD5,  0, GPIO_MODE_INPUT },    /* leuart0 RX */
 	{ GPIO_PC4,  1, GPIO_MODE_INPUTPULLFILTER }, /* POWER button */
 	{ GPIO_PE10, 1, GPIO_MODE_INPUTPULLFILTER }, /* Y button */
 	{ GPIO_PE11, 1, GPIO_MODE_INPUTPULLFILTER }, /* X button */
@@ -709,10 +774,14 @@ main(void)
 	clock_auxhfrco_disable();
 
 	/* enable low-energy clock and configure low-frequency clocks */
+	/* route the core clock (14MHz by default) divided by 2 to leuart0 (LFB) */
+	/* clock_le_div2(); / * this is the default */
 	clock_le_enable();
-	clock_lf_config(CLOCK_LFA_ULFRCO | CLOCK_LFB_DISABLED | CLOCK_LFC_DISABLED);
+	clock_lf_config(CLOCK_LFA_ULFRCO | CLOCK_LFB_CORECLK | CLOCK_LFC_DISABLED);
 	clock_rtc_div1();
 	clock_rtc_enable();
+	clock_leuart0_div4(); /* further divide the leuart0 clock by 4 */
+	clock_leuart0_enable();
 	while (clock_lf_syncbusy())
 		/* wait */;
 
@@ -726,6 +795,9 @@ main(void)
 
 	/* initialize i2c for display */
 	i2c0_init();
+
+	/* enable leuart0 */
+	leuart0_init();
 
 	/* don't buffer stdout */
 	setbuf(stdout, NULL);
@@ -769,9 +841,11 @@ main(void)
 			break;
 		case EVENT_TICK500:
 			if (rgb_enabled) {
+				fprintf(stderr, "Tick\r\n");
 				rgb_off();
 				rgb_enabled = false;
 			} else {
+				fprintf(stderr, "Tock\r\n");
 				rgb_on();
 				rgb_enabled = true;
 			}
