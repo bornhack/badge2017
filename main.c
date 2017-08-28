@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lib/clock.c"
 #include "lib/emu.c"
@@ -28,6 +29,11 @@
 #include "lib/i2c0.c"
 
 #include "font8x8.c"
+
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define NUM_STARS 50
 
 static struct {
 	const uint8_t *data;
@@ -408,7 +414,7 @@ event_push(enum event ev)
 }
 
 static enum event
-event_pop(void)
+event_pop(bool wait)
 {
 	unsigned int first = events.first;
 	enum event ev;
@@ -417,10 +423,11 @@ event_pop(void)
 		events.empty = true;
 		return EVENT_LAST;
 	}
-
-	while (first == events.last)
-		__WFI();
-
+	if(wait)
+	{
+		while (first == events.last)
+			__WFI();
+	}
 	if (events.empty) {
 		events.empty = false;
 		return EVENT_FIRST;
@@ -517,7 +524,7 @@ static struct button buttons[] = {
 	{ .n.fn = button_callback, .pin = GPIO_PF3,  .event = EVENT_BUTTON_B_DOWN,
 		.delay = 350, .repeat = 80 },
 	{ .n.fn = button_callback, .pin = GPIO_PE11, .event = EVENT_BUTTON_X_DOWN,
-		.delay = 350, .repeat = 80 },
+		.delay = 350, .repeat = 0 },
 	{ .n.fn = button_callback, .pin = GPIO_PE10, .event = EVENT_BUTTON_Y_DOWN,
 		.delay = 350, .repeat = 80 },
 	{ .n.fn = button_callback, .pin = GPIO_PC4,  .event = EVENT_BUTTON_POWER_DOWN,
@@ -697,13 +704,55 @@ enter_em4(void)
 	emu_em4_enter();
 }
 
+bool light_on;
+unsigned int rgb[3] = {20,0,0};
+static void animate_led(){
+	if(light_on){
+		rgb[0] = 23;
+		rgb[1] = 23;
+		rgb[2] = 23;
+	}
+	else{
+		rgb[0] = (int)(24 * (0.5 * cos(rtc_counter()/1000.0) + 0.5)); 
+		rgb[1] = (int)(24 * (0.5 * cos(rtc_counter()/2300.0) + 0.5)); 
+		rgb[2] = (int)(24 * (0.5 * cos(rtc_counter()/666.0) + 0.5)); 
+	}
+	rgb_set(rgb[0], rgb[1], rgb[2]);
+}
+struct star{
+	float x;
+	float y;
+};
+struct star stars[NUM_STARS];
+uint32_t last_frame = 0;
+static void starfield(struct display *dp){
+	display_clear(dp);
+	uint32_t diff = rtc_counter() - last_frame;
+	float center_x = (SCREEN_WIDTH / 2.0) + SCREEN_WIDTH / 2.0 * cos(rtc_counter()/5000.0);
+	float center_y = (SCREEN_HEIGHT / 2.0) + SCREEN_HEIGHT / 2.0 * sin(rtc_counter()/5000.0);
+	last_frame = rtc_counter();
+	for(int i=0;i<NUM_STARS;i++)
+	{
+		stars[i].x = stars[i].x + (stars[i].x - center_x) * diff / 1000.0;
+		stars[i].y = stars[i].y + (stars[i].y - center_y) * diff / 1000.0;
+		
+		if((int)stars[i].x > SCREEN_WIDTH - 1 || (int)stars[i].y > SCREEN_HEIGHT - 1 || stars[i].x < 0 || stars[i].y < 0)
+		{
+			stars[i].x = (float)rand() / RAND_MAX * SCREEN_WIDTH;
+			stars[i].y = (float)rand() / RAND_MAX * SCREEN_HEIGHT;
+			continue;
+		}
+		display_set(dp, stars[i].x, stars[i].y);
+		//dp->framebuf[(int)stars[i].y + 8 * 8 * (int)stars[i].x] = 1;
+	}
+	//display_set(dp, 10,10);
+	display_update(dp);
+}
+
 void __noreturn
 main(void)
 {
-	unsigned int i = 0;
-	unsigned int rgb[3] = { 0, 0, 0 };
 	struct ticker_data tick500;
-	bool rgb_enabled;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -738,7 +787,6 @@ main(void)
 	/* initialize RGB diode */
 	rgb_init();
 	rgb_on();
-	rgb_enabled = true;
 
 	/* make sure the POWER button is released */
 	while (!gpio_in(GPIO_PC4))
@@ -747,65 +795,35 @@ main(void)
 
 	/* now we can start listening for button presses */
 	buttons_init();
+	for(int i=0;i<NUM_STARS;i++)
+	{
+		stars[i].x = (float)rand() / RAND_MAX * SCREEN_WIDTH;
+		stars[i].y = (float)rand() / RAND_MAX* SCREEN_HEIGHT;
+	}
+	light_on = false;
 
 	ticker_run(&tick500, EVENT_TICK500, 500);
 
 	while (1) {
-		switch (event_pop()) {
-		case EVENT_LAST:
-			display_clear(&dp);
-			printf("\n\n"
-					"    Bornhack\n"
-					" Make Tradition\n"
-					"      2017\n"
-					"   bornhack.dk\n"
-					"    %2d %2d %2d\n"
-					"    %cR %cG %cB",
-					rgb[0], rgb[1], rgb[2],
-					(i==0) ? '*' : ' ',
-					(i==1) ? '*' : ' ',
-					(i==2) ? '*' : ' ');
-			display_update(&dp);
-			break;
-		case EVENT_TICK500:
-			if (rgb_enabled) {
-				rgb_off();
-				rgb_enabled = false;
-			} else {
-				rgb_on();
-				rgb_enabled = true;
-			}
-			break;
-		case EVENT_BUTTON_A_DOWN:
-			if (i > 0)
-				i--;
-			break;
-		case EVENT_BUTTON_B_DOWN:
-			if (i < 2)
-				i++;
-			break;
-		case EVENT_BUTTON_X_DOWN:
-			if (rgb[i] > 0)
-				rgb[i]--;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
-			break;
-		case EVENT_BUTTON_Y_DOWN:
-			if (rgb[i] < RGB_STEPS-1)
-				rgb[i]++;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
-			break;
-		case EVENT_BUTTON_POWER_UP:
-			NVIC_DisableIRQ(RTC_IRQn);
-			NVIC_DisableIRQ(GPIO_EVEN_IRQn);
-			NVIC_DisableIRQ(GPIO_ODD_IRQn);
+		switch (event_pop(false)) {
+			case EVENT_BUTTON_POWER_UP:
+				NVIC_DisableIRQ(RTC_IRQn);
+				NVIC_DisableIRQ(GPIO_EVEN_IRQn);
+				NVIC_DisableIRQ(GPIO_ODD_IRQn);
 
-			display_off(&dp);
-			gpio_uninit();
-			enter_em4();
-			break;
+				display_off(&dp);
+				gpio_uninit();
+				enter_em4();
+				break;
+		case EVENT_BUTTON_Y_DOWN:
+				light_on = !light_on;
+				break;
 		default:
 			/* do nothing */
 			break;
 		}
+		msleep(30);
+		animate_led();
+		starfield(&dp);
 	}
 }
