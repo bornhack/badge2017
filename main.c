@@ -44,6 +44,8 @@ typedef struct pendulum {
 	double vlx, vly; /*velocity of lower ball*/
 	double aux, auy; /*acceleration of upper ball*/
 	double alx, aly; /*acceleration of lower ball*/
+	double enu; /*energy of the upper ball*/
+	double enl; /*energy of the upper ball*/
 	double deltax,deltay; /*acceleration deltas for debugging purposes*/
 	double distlu; /*distance between the lower and the upper ball*/
 	double distuf; /*distance between the upper ball and fix*/
@@ -861,6 +863,8 @@ pendulum doublependulum (double fx, double fy, double ux, double uy, double lx, 
 	pend.fy=fy;
 	pend.ux=ux;
 	pend.uy=uy;
+	pend.enu=uy;
+	pend.enl=ly;
 	pend.lx=lx;
 	pend.ly=ly;
 	pend.vux=0.0;
@@ -905,104 +909,110 @@ void pend_render(struct display *dp,pendulum * pend){
 	renderLine(dp,pend->ux,64.0-pend->uy,pend->lx,64.0-pend->ly);
 	renderLine(dp,pend->fx,64.0-pend->fy,pend->ux,64.0-pend->uy);
 }
-void pend_updatetime(pendulum *pend,double t){
-	pend_updatedist(pend);
-	if (pend->distuf<pend->maxdistuf-0.1){
-		pend->auy+=pend->g*t;
-		pend->vuy+=pend->auy*t;
-		pend->uy +=pend->vuy*t;
-		pend_updatedist(pend);
-		if (pend->distuf>=pend->maxdistuf){
+void pend_scalelengthuf(pendulum *pend){
 			pend->ux
 			=(pend->maxdistuf/pend->distuf)*(pend->ux-pend->fx)+pend->fx;
 			pend->uy
 			=(pend->maxdistuf/pend->distuf)*(pend->uy-pend->fy)+pend->fy;
+}
+void pend_scalelengthlu(pendulum *pend){
+			pend->lx
+			=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
+			pend->ly
+			=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+}
+void pend_updatetime(pendulum *pend,double t){
+	pend_updatedist(pend);
+	if (pend->distuf<pend->maxdistuf-0.01){
+		pend->auy=pend->g;
+		pend->vuy+=pend->auy*t;
+		pend->uy +=pend->vuy*t;
+		pend_updatedist(pend);
+		if (pend->distuf>=pend->maxdistuf){
+			pend_scalelengthuf(pend);
 		}
 	}
 	else{
-		pend->ux
-		=(pend->maxdistuf/pend->distuf)*(pend->ux-pend->fx)+pend->fx;
-		pend->uy
-		=(pend->maxdistuf/pend->distuf)*(pend->uy-pend->fy)+pend->fy;
+		pend_scalelengthuf(pend);
 
 		double normvectx=normvecx(pend->fx,pend->fy,pend->ux,pend->uy);
 		double normvecty=normvecy(pend->fx,pend->fy,pend->ux,pend->uy);
 		double ax=pend->g*normvecty*normvectx;
 		double ay=pend->g*normvecty*normvecty;
-		pend->aux=//(pend->aux*normvectx+pend->auy*normvecty)*normvectx;
-					norm(pend->aux,pend->auy)*
+		pend->aux=(pend->aux*normvectx+pend->auy*normvecty)*normvectx;
+					/*norm(pend->aux,pend->auy)*
 					(pend->aux*normvectx+pend->auy*normvecty)/
 					fabs(pend->aux*normvectx+pend->auy*normvecty)
-					*normvectx;
-		pend->auy=//(pend->aux*normvectx+pend->auy*normvecty)*normvecty;
-					norm(pend->aux,pend->auy)*
+					*normvectx;*/
+		pend->auy=(pend->aux*normvectx+pend->auy*normvecty)*normvecty;
+				/*	norm(pend->aux,pend->auy)*
 					(pend->aux*normvectx+pend->auy*normvecty)/
 					fabs(pend->aux*normvectx+pend->auy*normvecty)
-					*normvecty;
+					*normvecty;*/
 		pend->aux+=ax;
 		pend->auy+=ay;
 		pend->vux+=pend->aux*t;
 		pend->vuy+=pend->auy*t;
-		pend->ux+=pend->vux*t+0.5*pend->aux*t*t;
-		pend->uy+=pend->vuy*t+0.5*pend->auy*t*t;
-		pend->deltax=pend->vux;
-		pend->deltay=pend->vuy;
+		ax=norm(pend->vux,pend->vuy);
+		ay=sqrt(fabs(2.0*(pend->enu-pend->uy)*pend->g));
+		if (fabs(ax-ay)>0.001 && fabs(ax)>0.001){
+			pend->vux=(ay/ax)*pend->vux;
+			pend->vuy=(ay/ax)*pend->vuy;
+	//		printf("%d ",abs(ax-ay));
+		}
+		pend->ux+=pend->vux*t;
+		pend->uy+=pend->vuy*t;
+		pend->deltax=pend->aux;
+		pend->deltay=pend->auy;
 
 		pend_updatedist(pend);
-		pend->ux
-		=(pend->maxdistuf/pend->distuf)*(pend->ux-pend->fx)+pend->fx;
-		pend->uy
-		=(pend->maxdistuf/pend->distuf)*(pend->uy-pend->fy)+pend->fy;
+		pend_scalelengthuf(pend);
 	}
 
 
 	pend_updatedist(pend);
 	if (pend->distlu<pend->maxdistlu-0.5){
-		pend->aly+=pend->g*t;
+		pend->aly =pend->g;
 		pend->vly+=pend->aly*t;
 		pend->ly +=pend->vly*t;
 		pend_updatedist(pend);
 		if (pend->distlu>=pend->maxdistlu){
-			pend->lx
-			=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
-			pend->ly
-			=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+			pend_scalelengthlu(pend);
 		}
 	}
 	else{
-		pend->lx
-		=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
-		pend->ly
-		=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+		pend_scalelengthlu(pend);
 
 		double normvectx=normvecx(pend->ux,pend->uy,pend->lx,pend->ly);
 		double normvecty=normvecy(pend->ux,pend->uy,pend->lx,pend->ly);
 		double ax=pend->g*normvecty*normvectx;
 		double ay=pend->g*normvecty*normvecty;
-		pend->alx=//(pend->alx*normvectx+pend->aly*normvecty)*normvectx;
-					norm(pend->alx,pend->aly)*
+		pend->alx=(pend->alx*normvectx+pend->aly*normvecty)*normvectx;
+					/*norm(pend->alx,pend->aly)*
 					(pend->alx*normvectx+pend->aly*normvecty)/
 					fabs(pend->alx*normvectx+pend->aly*normvecty)
-					*normvectx;
-		pend->aly=//(pend->alx*normvectx+pend->aly*normvecty)*normvecty;
-					norm(pend->alx,pend->aly)*
+					*normvectx;*/
+		pend->aly=(pend->alx*normvectx+pend->aly*normvecty)*normvecty;
+					/*norm(pend->alx,pend->aly)*
 					(pend->alx*normvectx+pend->aly*normvecty)/
 					fabs(pend->alx*normvectx+pend->aly*normvecty)
-					*normvecty;
-
-
+					*normvecty;*/
 		pend->alx+=ax;
 		pend->aly+=ay;
 		pend->vlx+=pend->alx*t;
 		pend->vly+=pend->aly*t;
-		pend->lx+=pend->vlx*t+0.5*pend->alx*t*t;
-		pend->ly+=pend->vly*t+0.5*pend->aly*t*t;
+		ax=norm(pend->vlx,pend->vly);
+		ay=sqrt(fabs(2.0*(pend->enl-pend->ly)*pend->g));
+		if (fabs(ax-ay)>0.001 && fabs(ax)>0.001){
+			pend->vlx=(ay/ax)*pend->vlx;
+			pend->vly=(ay/ax)*pend->vly;
+	//		printf("%d ",abs(ax-ay));
+		}
+		pend->lx+=pend->vlx*t;
+		pend->ly+=pend->vly*t;
 
 		pend_updatedist(pend);
-		pend->lx
-		=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
-		pend->ly
-		=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+		pend_scalelengthlu(pend);
 	}
 }
 void __noreturn
@@ -1112,19 +1122,20 @@ main(void)
 		}
 		if (pict==3){
 			display_clear(&dp);
-			renderCoordinateSystem(&dp);
+			//renderCoordinateSystem(&dp);
 //			renderRectangle(&dp,64-26,32-13,64+26,32+13);
 			pend_render(&dp,&pend);
 		/*	if ((pend.aux)/16.0+64.0>0 && (pend.aux)/16.0+64.0<128){
 				display_set(&dp,((int) (pend.aux/16.0))+64,
 				64-((int) (pend.auy/16.0))-32);
 			}*/
-			if ((pend.deltax)/16.0+64.0>0 && (pend.deltax)/16.0+64.0<128){
-				display_set(&dp,((int) (pend.deltax/16.0))+64,
-				64-((int) (pend.deltay/16.0))-32);
-			}
+			/*double scal=10.4;
+			if ((pend.deltax)/scal+64.0>0 && (pend.deltax)/scal+64.0<128){
+				display_set(&dp,((int) (pend.deltax/scal))+64,
+				64-((int) (pend.deltay/scal))-32);
+			}*/
 			display_update(&dp);
-			pend_updatetime(&pend,0.05);
+			pend_updatetime(&pend,0.5);
 		}
 		break;
 		case EVENT_BUTTON_A_DOWN:
