@@ -36,6 +36,46 @@ static struct {
 	volatile int ret;
 } i2c0;
 
+typedef struct pendulum {
+	double fx, fy; /*position of fix*/
+  double ux, uy; /*position of upper ball*/
+  double lx, ly; /*position of lower ball*/
+	double vux, vuy; /*velocity of upper ball*/
+	double vlx, vly; /*velocity of lower ball*/
+	double aux, auy; /*acceleration of upper ball*/
+	double alx, aly; /*acceleration of lower ball*/
+	double deltax,deltay; /*acceleration deltas for debugging purposes*/
+	double distlu; /*distance between the lower and the upper ball*/
+	double distuf; /*distance between the upper ball and fix*/
+	double maxdistlu;
+	double maxdistuf;
+
+	double g; /*grativity*/
+} pendulum;
+double norm(double x, double y){
+	return sqrt(x*x+y*y);
+}
+double unitvecx(double x, double y){
+	return x/norm(x,y);
+}
+double unitvecy(double x, double y){
+	return y/norm(x,y);
+}
+double normvecx(double x1,double y1,double x2,double y2){
+	if (unitvecy(x2-x1,y2-y1)<0){
+		return -unitvecy(x2-x1,y2-y1);
+	}else{
+		return unitvecy(x2-x1,y2-y1);
+	}
+}
+double normvecy(double x1,double y1,double x2,double y2){
+	if (unitvecy(x2-x1,y2-y1)<0){
+		return unitvecx(x2-x1,y2-y1);
+	}else{
+		return -unitvecx(x2-x1,y2-y1);
+	}
+}
+
 void
 I2C0_IRQHandler(void)
 {
@@ -768,6 +808,203 @@ display_fish(struct display *dp, int wherex, int wherey, int fishsize, bool head
 	}
 
 }
+
+void renderLine(struct display *dp, double x1, double y1,
+	double x2, double y2){
+		double dist12x=x2-x1;
+		double dist12y=y2-y1;
+		int sign12x=(int) (dist12x/fabs(dist12x));
+		int sign12y=(int) (dist12y/fabs(dist12y));
+		double a=1.0;
+		if (fabs(dist12x)>fabs(dist12y)){
+			a=dist12y/dist12x;
+			for (int ii=0;ii!=(int) dist12x+sign12x; ii+=sign12x){
+				double y=y1+a*((double) ii);
+				if ((x1+(double) ii)>0 && (x1+(double) ii)<128
+				&& y>0 && y<64)
+				display_set(dp,ii+(int) x1,(int)y);
+			}
+		}
+		else
+		{
+			if (fabs(dist12y)>fabs(dist12x)){
+				a=dist12x/dist12y;
+			}
+			for (int ii=0;ii!=(int) dist12y+sign12y; ii+=sign12y){
+				double x=x1+a*((double) ii);
+				if (x>0 && x<128 &&
+					 (y1+(double) ii) >0 && (y1+(double) ii)<64){
+					display_set(dp,(int) x, ii+(int) y1);
+				}
+			}
+		}
+}
+void renderCoordinateSystem(struct display *dp){
+	renderLine(dp,0.0,32.0,128.0,32.0);
+	renderLine(dp,0.0,31.0,128.0,31.0);
+	renderLine(dp,64.0,0.0,64.0,64.0);
+	renderLine(dp,63.0,0.0,63.0,64.0);
+}
+void renderRectangle(struct display *dp, double x1, double y1, double x2, double y2){
+	renderLine(dp,x1,y1,x1,y2);
+	renderLine(dp,x1,y2,x2,y2);
+	renderLine(dp,x2,y2,x2,y1);
+	renderLine(dp,x2,y1,x1,y1);
+}
+void pend_updatedist(pendulum *pend) {
+	pend->distlu=norm(pend->lx-pend->ux,pend->ly-pend->uy);
+	pend->distuf=norm(pend->ux-pend->fx,pend->uy-pend->fy);
+}
+pendulum doublependulum (double fx, double fy, double ux, double uy, double lx, double ly){
+	pendulum pend;
+	pend.fx=fx;
+	pend.fy=fy;
+	pend.ux=ux;
+	pend.uy=uy;
+	pend.lx=lx;
+	pend.ly=ly;
+	pend.vux=0.0;
+	pend.vuy=0.0;
+	pend.vlx=0.0;
+	pend.vly=0.0;
+	pend.aux=0.0;
+	pend.auy=0.0;
+	pend.alx=0.0;
+	pend.aly=0.0;
+	pend.deltax=0.0;
+	pend.deltay=0.0;
+	pend.maxdistlu=15.0;
+	pend.maxdistuf=15.0;
+	pend.g=-10.0;
+	pend.distlu=0.0;
+	pend.distuf=0.0;
+	pend_updatedist(&pend);
+	if (pend.distlu>pend.maxdistlu) {
+		pend.maxdistlu=pend.distlu;
+	}
+	if (pend.distuf>pend.maxdistuf) {
+		pend.maxdistuf=pend.distuf;
+	}
+	return pend;
+}
+void pend_render(struct display *dp,pendulum * pend){
+	int lx=(int) pend->lx;
+	int ly=64 - (int) pend->ly;
+	int ux=(int) pend->ux;
+	int uy=64 - (int) pend->uy;
+	for (int ii=-1;ii<2;ii++){
+		for (int jj=-1;jj<2;jj++){
+			if(lx+ii>0 && ly+jj>0 && lx+ii<128 && ly+jj<64){
+				display_set(dp,lx+ii,ly+jj);
+			}
+			if(ux+ii>0 && uy+jj>0 && ux+ii<128 && uy+jj<64){
+				display_set(dp,ux+ii,uy+jj);
+			}
+		}
+	}
+	renderLine(dp,pend->ux,64.0-pend->uy,pend->lx,64.0-pend->ly);
+	renderLine(dp,pend->fx,64.0-pend->fy,pend->ux,64.0-pend->uy);
+}
+void pend_updatetime(pendulum *pend,double t){
+	pend_updatedist(pend);
+	if (pend->distuf<pend->maxdistuf-0.1){
+		pend->auy+=pend->g*t;
+		pend->vuy+=pend->auy*t;
+		pend->uy +=pend->vuy*t;
+		pend_updatedist(pend);
+		if (pend->distuf>=pend->maxdistuf){
+			pend->ux
+			=(pend->maxdistuf/pend->distuf)*(pend->ux-pend->fx)+pend->fx;
+			pend->uy
+			=(pend->maxdistuf/pend->distuf)*(pend->uy-pend->fy)+pend->fy;
+		}
+	}
+	else{
+		pend->ux
+		=(pend->maxdistuf/pend->distuf)*(pend->ux-pend->fx)+pend->fx;
+		pend->uy
+		=(pend->maxdistuf/pend->distuf)*(pend->uy-pend->fy)+pend->fy;
+
+		double normvectx=normvecx(pend->fx,pend->fy,pend->ux,pend->uy);
+		double normvecty=normvecy(pend->fx,pend->fy,pend->ux,pend->uy);
+		double ax=pend->g*normvecty*normvectx;
+		double ay=pend->g*normvecty*normvecty;
+		pend->aux=//(pend->aux*normvectx+pend->auy*normvecty)*normvectx;
+					norm(pend->aux,pend->auy)*
+					(pend->aux*normvectx+pend->auy*normvecty)/
+					fabs(pend->aux*normvectx+pend->auy*normvecty)
+					*normvectx;
+		pend->auy=//(pend->aux*normvectx+pend->auy*normvecty)*normvecty;
+					norm(pend->aux,pend->auy)*
+					(pend->aux*normvectx+pend->auy*normvecty)/
+					fabs(pend->aux*normvectx+pend->auy*normvecty)
+					*normvecty;
+		pend->aux+=ax;
+		pend->auy+=ay;
+		pend->vux+=pend->aux*t;
+		pend->vuy+=pend->auy*t;
+		pend->ux+=pend->vux*t+0.5*pend->aux*t*t;
+		pend->uy+=pend->vuy*t+0.5*pend->auy*t*t;
+		pend->deltax=pend->vux;
+		pend->deltay=pend->vuy;
+
+		pend_updatedist(pend);
+		pend->ux
+		=(pend->maxdistuf/pend->distuf)*(pend->ux-pend->fx)+pend->fx;
+		pend->uy
+		=(pend->maxdistuf/pend->distuf)*(pend->uy-pend->fy)+pend->fy;
+	}
+
+
+	pend_updatedist(pend);
+	if (pend->distlu<pend->maxdistlu-0.5){
+		pend->aly+=pend->g*t;
+		pend->vly+=pend->aly*t;
+		pend->ly +=pend->vly*t;
+		pend_updatedist(pend);
+		if (pend->distlu>=pend->maxdistlu){
+			pend->lx
+			=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
+			pend->ly
+			=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+		}
+	}
+	else{
+		pend->lx
+		=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
+		pend->ly
+		=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+
+		double normvectx=normvecx(pend->ux,pend->uy,pend->lx,pend->ly);
+		double normvecty=normvecy(pend->ux,pend->uy,pend->lx,pend->ly);
+		double ax=pend->g*normvecty*normvectx;
+		double ay=pend->g*normvecty*normvecty;
+		pend->alx=//(pend->alx*normvectx+pend->aly*normvecty)*normvectx;
+					norm(pend->alx,pend->aly)*
+					(pend->alx*normvectx+pend->aly*normvecty)/
+					fabs(pend->alx*normvectx+pend->aly*normvecty)
+					*normvectx;
+		pend->aly=//(pend->alx*normvectx+pend->aly*normvecty)*normvecty;
+					norm(pend->alx,pend->aly)*
+					(pend->alx*normvectx+pend->aly*normvecty)/
+					fabs(pend->alx*normvectx+pend->aly*normvecty)
+					*normvecty;
+
+
+		pend->alx+=ax;
+		pend->aly+=ay;
+		pend->vlx+=pend->alx*t;
+		pend->vly+=pend->aly*t;
+		pend->lx+=pend->vlx*t+0.5*pend->alx*t*t;
+		pend->ly+=pend->vly*t+0.5*pend->aly*t*t;
+
+		pend_updatedist(pend);
+		pend->lx
+		=(pend->maxdistlu/pend->distlu)*(pend->lx-pend->ux)+pend->ux;
+		pend->ly
+		=(pend->maxdistlu/pend->distlu)*(pend->ly-pend->uy)+pend->uy;
+	}
+}
 void __noreturn
 main(void)
 {
@@ -775,10 +1012,11 @@ main(void)
 	unsigned int rgb[3] = { 0, 0, 0 };
 	unsigned int pict = 0;
 	int fishTime=59;
-	int randomfishhight=40;
+	int randomfishhight=1;
 	int randomfishpos=6;
 	struct ticker_data tick500;
-	//bool rgb_enabled;
+	pendulum pend=doublependulum(64.0,63.0,54.0,59.0,54.0,53.0);
+//	bool rgb_enabled;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -813,7 +1051,7 @@ main(void)
 	/* initialize RGB diode */
 	rgb_init();
 	rgb_on();
-	//rgb_enabled = true;
+//	rgb_enabled = true;
 
 	/* make sure the POWER button is released */
 	while (!gpio_in(GPIO_PC4))
@@ -861,6 +1099,7 @@ main(void)
 			break;
 		case EVENT_TICK500:
 		if (pict==2) {
+				display_clear(&dp);
 				fishTime--;
 				if (fishTime<=0)
 				{
@@ -868,20 +1107,25 @@ main(void)
 					randomfishhight = rand() % 8+1;
 					randomfishpos = rand() % (64-6*randomfishhight);
 				}
-				display_clear(&dp);
 				display_fish(&dp,fishTime, randomfishpos, randomfishhight, false);
 				display_update(&dp);
-				rgb_on();
-				rgb_off();
 		}
-	/*		if (rgb_enabled) {
-				rgb_off();
-				rgb_enabled = false;
-			} else {
-				rgb_on();
-				rgb_enabled = true;
+		if (pict==3){
+			display_clear(&dp);
+			renderCoordinateSystem(&dp);
+//			renderRectangle(&dp,64-26,32-13,64+26,32+13);
+			pend_render(&dp,&pend);
+		/*	if ((pend.aux)/16.0+64.0>0 && (pend.aux)/16.0+64.0<128){
+				display_set(&dp,((int) (pend.aux/16.0))+64,
+				64-((int) (pend.auy/16.0))-32);
+			}*/
+			if ((pend.deltax)/16.0+64.0>0 && (pend.deltax)/16.0+64.0<128){
+				display_set(&dp,((int) (pend.deltax/16.0))+64,
+				64-((int) (pend.deltay/16.0))-32);
 			}
-			*/
+			display_update(&dp);
+			pend_updatetime(&pend,0.05);
+		}
 		break;
 		case EVENT_BUTTON_A_DOWN:
 			if (i > 0)
@@ -892,7 +1136,7 @@ main(void)
 				i++;
 			break;
 		case EVENT_BUTTON_X_DOWN:
-			if (pict<2)
+			if (pict<3)
 				pict++;
 			else
 				pict=0;
