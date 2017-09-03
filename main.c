@@ -663,12 +663,72 @@ enter_em4(void)
 	/* do the EM4 handshake */
 	emu_em4_enter();
 }
+static void
+display_fish(struct display *dp, int wherex, int wherey, int fishsize, bool headleft)
+{
+	int fishsign=1;
+	if (headleft){
+		fishsign=-1;
+		wherex+=6*fishsize;
+	}
 
+	for (int indy=0 ; indy<fishsize ; indy++)
+	{
+		/*Topflin*/
+		for (int ind=1*fishsize ; ind <3*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+indy);
+		}
+		/*Above the eye*/
+		for (int ind=0*fishsize ; ind <4*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+1*fishsize+indy);
+		}
+		for (int ind=5*fishsize ; ind <6*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+1*fishsize+indy);
+		}
+		/*The Eye one*/
+		for (int ind=0*fishsize ; ind <1*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,  wherey+2*fishsize+indy);
+		}
+		for (int ind=2*fishsize ; ind <6*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+2*fishsize+indy);
+		}
+		/*The Eye two*/
+		for (int ind=0*fishsize ; ind <1*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,  wherey+3*fishsize+indy);
+		}
+		for (int ind=2*fishsize ; ind <6*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+3*fishsize+indy);
+		}
+		/*Below the eye*/
+		for (int ind=0*fishsize ; ind <4*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+4*fishsize+indy);
+		}
+		for (int ind=5*fishsize ; ind <6*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+4*fishsize+indy);
+		}
+		/*Lowerfin*/
+		for (int ind=1*fishsize ; ind <2*fishsize ; ind++)
+		{
+			display_set(dp,wherex+fishsign*ind,wherey+5*fishsize+indy);		
+		}
+	}
+
+}
 void __noreturn
 main(void)
 {
 	unsigned int i = 0;
 	unsigned int rgb[3] = { 0, 0, 0 };
+	unsigned int pict = 0;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -715,19 +775,44 @@ main(void)
 	while (1) {
 		switch (event_pop()) {
 		case EVENT_LAST:
-			display_clear(&dp);
-			printf("\n\n"
-					"    Bornhack\n"
-					" Make Tradition\n"
-					"      2017\n"
-					"   bornhack.dk\n"
-					"    %2d %2d %2d\n"
-					"    %cR %cG %cB",
-					rgb[0], rgb[1], rgb[2],
-					(i==0) ? '*' : ' ',
-					(i==1) ? '*' : ' ',
-					(i==2) ? '*' : ' ');
-			display_update(&dp);
+			if (pict==1){
+				display_clear(&dp);
+				printf("\n\n"
+						"    Bornhaxx\n"
+						" Make Tradition\n"
+						"      2017\n"
+						"   bornhack.dk\n"
+						"    %2d %2d %2d\n"
+						"    %cR %cG %cB",
+						rgb[0], rgb[1], rgb[2],
+						(i==0) ? '*' : ' ',
+						(i==1) ? '*' : ' ',
+						(i==2) ? '*' : ' ');
+				display_update(&dp);
+			}
+			if (pict==2){
+				int time=128;	
+				time--;
+				if (time<1) time=128;
+				display_clear(&dp);
+				display_fish(&dp,time, 16, 6, false);
+				display_update(&dp);
+			}
+			if (pict==0){
+				display_clear(&dp);
+				printf("\n\n"
+						"    Bornhack\n"
+						" Make Tradition\n"
+						"      2017\n"
+						"   bornhack.dk\n"
+						"    %2d %2d %2d\n"
+						"    %cR %cG %cB",
+						rgb[0], rgb[1], rgb[2],
+						(i==0) ? '*' : ' ',
+						(i==1) ? '*' : ' ',
+						(i==2) ? '*' : ' ');
+				display_update(&dp);
+			}
 			break;
 		case EVENT_BUTTON_A_DOWN:
 			if (i > 0)
@@ -738,13 +823,16 @@ main(void)
 				i++;
 			break;
 		case EVENT_BUTTON_X_DOWN:
-			if (rgb[i] > 0)
-				rgb[i]--;
-			rgb_set(rgb[0], rgb[1], rgb[2]);
+			if (pict<2)
+				pict++;
+			else
+				pict=0;
 			break;
 		case EVENT_BUTTON_Y_DOWN:
 			if (rgb[i] < RGB_STEPS-1)
 				rgb[i]++;
+			else
+				rgb[i]=0;
 			rgb_set(rgb[0], rgb[1], rgb[2]);
 			break;
 		case EVENT_BUTTON_POWER_UP:
