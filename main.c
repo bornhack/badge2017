@@ -44,8 +44,7 @@ typedef struct pendulum {
 	double vlx, vly; /*velocity of lower ball*/
 	double aux, auy; /*acceleration of upper ball*/
 	double alx, aly; /*acceleration of lower ball*/
-	double enu; /*energy of the upper ball*/
-	double enl; /*energy of the upper ball*/
+	double en; /*energy of the balls*/
 	double deltax,deltay; /*acceleration deltas for debugging purposes*/
 	double distlu; /*distance between the lower and the upper ball*/
 	double distuf; /*distance between the upper ball and fix*/
@@ -56,6 +55,9 @@ typedef struct pendulum {
 } pendulum;
 double norm(double x, double y){
 	return sqrt(x*x+y*y);
+}
+double scalprod(double x1,double y1,double x2,double y2){
+	return x1*x2+y1*y2;
 }
 double unitvecx(double x, double y){
 	return x/norm(x,y);
@@ -77,7 +79,20 @@ double normvecy(double x1,double y1,double x2,double y2){
 		return -unitvecx(x2-x1,y2-y1);
 	}
 }
-
+double projectx(double x, double y, double nx, double ny){
+	return (x*nx+y*ny)*nx;
+					/*norm(pend->aux,pend->auy)*
+					(pend->aux*normvectx+pend->auy*normvecty)/
+					fabs(pend->aux*normvectx+pend->auy*normvecty)
+					*normvectx;*/
+}
+double projecty(double x, double y, double nx, double ny){
+	return (x*nx+y*ny)*ny;
+					/*norm(pend->aux,pend->auy)*
+					(pend->aux*normvectx+pend->auy*normvecty)/
+					fabs(pend->aux*normvectx+pend->auy*normvecty)
+					*normvectx;*/
+}
 void
 I2C0_IRQHandler(void)
 {
@@ -811,6 +826,97 @@ display_fish(struct display *dp, int wherex, int wherey, int fishsize, bool head
 
 }
 
+static void __unused
+display_fishIn(struct display *dp, int wherex, int wherey, int fishsize, bool headleft)
+{
+	int fishsign=1;
+	int w = 128;
+	int h = 64;
+	if (headleft){
+		fishsign=-1;
+		wherex+=6*fishsize;
+	}
+
+	for (int indy=0 ; indy<fishsize ; indy++)
+	{
+		/*Topflin*/
+		for (int ind=1*fishsize ; ind <3*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+indy)>0 && (wherey+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),(wherey+indy));
+		}
+		/*Above the eye*/
+		for (int ind=0*fishsize ; ind <4*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+1*fishsize+indy)>0 && (wherey+1*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+1*fishsize+indy));
+		}
+		for (int ind=5*fishsize ; ind <6*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+1*fishsize+indy)>0 && (wherey+1*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+1*fishsize+indy));
+		}
+		/*The Eye one*/
+		for (int ind=0*fishsize ; ind <1*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+2*fishsize+indy)>0 && (wherey+2*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+2*fishsize+indy));
+		}
+		for (int ind=2*fishsize ; ind <6*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+2*fishsize+indy)>0 && (wherey+2*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+2*fishsize+indy));
+		}
+		/*The Eye two*/
+		for (int ind=0*fishsize ; ind <1*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+3*fishsize+indy)>0 && (wherey+3*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			  (wherey+3*fishsize+indy));
+		}
+		for (int ind=2*fishsize ; ind <6*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+3*fishsize+indy)>0 && (wherey+3*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+3*fishsize+indy));
+		}
+		/*Below the eye*/
+		for (int ind=0*fishsize ; ind <4*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+4*fishsize+indy)>0 && (wherey+4*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+4*fishsize+indy));
+		}
+		for (int ind=5*fishsize ; ind <6*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+4*fishsize+indy)>0 && (wherey+4*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+4*fishsize+indy));
+		}
+		/*Lowerfin*/
+		for (int ind=1*fishsize ; ind <2*fishsize ; ind++)
+		{
+			if((wherex+fishsign*ind)>0 && (wherex+fishsign*ind)<w &&
+			(wherey+5*fishsize+indy)>0 && (wherey+5*fishsize+indy)<h)
+			display_set(dp,(wherex+fishsign*ind),
+			(wherey+5*fishsize+indy));
+		}
+	}
+
+}
 void renderLine(struct display *dp, double x1, double y1,
 	double x2, double y2){
 		double dist12x=x2-x1;
@@ -863,8 +969,6 @@ pendulum doublependulum (double fx, double fy, double ux, double uy, double lx, 
 	pend.fy=fy;
 	pend.ux=ux;
 	pend.uy=uy;
-	pend.enu=uy;
-	pend.enl=ly;
 	pend.lx=lx;
 	pend.ly=ly;
 	pend.vux=0.0;
@@ -877,11 +981,12 @@ pendulum doublependulum (double fx, double fy, double ux, double uy, double lx, 
 	pend.aly=0.0;
 	pend.deltax=0.0;
 	pend.deltay=0.0;
-	pend.maxdistlu=15.0;
-	pend.maxdistuf=15.0;
-	pend.g=-10.0;
+	pend.maxdistlu=20.0;
+	pend.maxdistuf=10.0;
+	pend.g=-1.0;
 	pend.distlu=0.0;
 	pend.distuf=0.0;
+	pend.en=fabs(pend.g)*(pend.ly+pend.uy);
 	pend_updatedist(&pend);
 	if (pend.distlu>pend.maxdistlu) {
 		pend.maxdistlu=pend.distlu;
@@ -896,6 +1001,8 @@ void pend_render(struct display *dp,pendulum * pend){
 	int ly=64 - (int) pend->ly;
 	int ux=(int) pend->ux;
 	int uy=64 - (int) pend->uy;
+	/*display_fishIn(dp,lx-2,ly-2,2,0);
+	display_fishIn(dp,ux-2,uy-2,2,1);*/
 	for (int ii=-1;ii<2;ii++){
 		for (int jj=-1;jj<2;jj++){
 			if(lx+ii>0 && ly+jj>0 && lx+ii<128 && ly+jj<64){
@@ -926,7 +1033,6 @@ void pend_updatetime(pendulum *pend,double t){
 	if (pend->distuf<pend->maxdistuf-0.01){
 		pend->auy=pend->g;
 		pend->vuy+=pend->auy*t;
-		pend->uy +=pend->vuy*t;
 		pend_updatedist(pend);
 		if (pend->distuf>=pend->maxdistuf){
 			pend_scalelengthuf(pend);
@@ -934,47 +1040,25 @@ void pend_updatetime(pendulum *pend,double t){
 	}
 	else{
 		pend_scalelengthuf(pend);
-
 		double normvectx=normvecx(pend->fx,pend->fy,pend->ux,pend->uy);
 		double normvecty=normvecy(pend->fx,pend->fy,pend->ux,pend->uy);
-		double ax=pend->g*normvecty*normvectx;
-		double ay=pend->g*normvecty*normvecty;
-		pend->aux=(pend->aux*normvectx+pend->auy*normvecty)*normvectx;
-					/*norm(pend->aux,pend->auy)*
-					(pend->aux*normvectx+pend->auy*normvecty)/
-					fabs(pend->aux*normvectx+pend->auy*normvecty)
-					*normvectx;*/
-		pend->auy=(pend->aux*normvectx+pend->auy*normvecty)*normvecty;
-				/*	norm(pend->aux,pend->auy)*
-					(pend->aux*normvectx+pend->auy*normvecty)/
-					fabs(pend->aux*normvectx+pend->auy*normvecty)
-					*normvecty;*/
+		double ax=projectx(0.0,pend->g,normvectx,normvecty);
+		double ay=projecty(0.0,pend->g,normvectx,normvecty);
+		pend->aux=projectx(pend->aux,pend->auy,normvectx,normvecty);
+		pend->auy=projecty(pend->aux,pend->auy,normvectx,normvecty);
 		pend->aux+=ax;
 		pend->auy+=ay;
 		pend->vux+=pend->aux*t;
 		pend->vuy+=pend->auy*t;
-		ax=norm(pend->vux,pend->vuy);
-		ay=sqrt(fabs(2.0*(pend->enu-pend->uy)*pend->g));
-		if (fabs(ax-ay)>0.001 && fabs(ax)>0.001){
-			pend->vux=(ay/ax)*pend->vux;
-			pend->vuy=(ay/ax)*pend->vuy;
-	//		printf("%d ",abs(ax-ay));
-		}
-		pend->ux+=pend->vux*t;
-		pend->uy+=pend->vuy*t;
 		pend->deltax=pend->aux;
 		pend->deltay=pend->auy;
-
 		pend_updatedist(pend);
 		pend_scalelengthuf(pend);
 	}
-
-
 	pend_updatedist(pend);
-	if (pend->distlu<pend->maxdistlu-0.5){
-		pend->aly =pend->g;
+	if (pend->distlu<pend->maxdistlu-0.01){
+		pend->aly=pend->g;
 		pend->vly+=pend->aly*t;
-		pend->ly +=pend->vly*t;
 		pend_updatedist(pend);
 		if (pend->distlu>=pend->maxdistlu){
 			pend_scalelengthlu(pend);
@@ -982,37 +1066,52 @@ void pend_updatetime(pendulum *pend,double t){
 	}
 	else{
 		pend_scalelengthlu(pend);
-
 		double normvectx=normvecx(pend->ux,pend->uy,pend->lx,pend->ly);
 		double normvecty=normvecy(pend->ux,pend->uy,pend->lx,pend->ly);
-		double ax=pend->g*normvecty*normvectx;
-		double ay=pend->g*normvecty*normvecty;
-		pend->alx=(pend->alx*normvectx+pend->aly*normvecty)*normvectx;
-					/*norm(pend->alx,pend->aly)*
-					(pend->alx*normvectx+pend->aly*normvecty)/
-					fabs(pend->alx*normvectx+pend->aly*normvecty)
-					*normvectx;*/
-		pend->aly=(pend->alx*normvectx+pend->aly*normvecty)*normvecty;
-					/*norm(pend->alx,pend->aly)*
-					(pend->alx*normvectx+pend->aly*normvecty)/
-					fabs(pend->alx*normvectx+pend->aly*normvecty)
-					*normvecty;*/
+		double ax=projectx(0.0,pend->g,normvectx,normvecty);
+		double ay=projecty(0.0,pend->g,normvectx,normvecty);
+		pend->alx=projectx(pend->alx,pend->aly,normvectx,normvecty);
+		pend->aly=projecty(pend->alx,pend->aly,normvectx,normvecty);
 		pend->alx+=ax;
 		pend->aly+=ay;
 		pend->vlx+=pend->alx*t;
 		pend->vly+=pend->aly*t;
-		ax=norm(pend->vlx,pend->vly);
-		ay=sqrt(fabs(2.0*(pend->enl-pend->ly)*pend->g));
-		if (fabs(ax-ay)>0.001 && fabs(ax)>0.001){
-			pend->vlx=(ay/ax)*pend->vlx;
-			pend->vly=(ay/ax)*pend->vly;
-	//		printf("%d ",abs(ax-ay));
-		}
-		pend->lx+=pend->vlx*t;
-		pend->ly+=pend->vly*t;
-
 		pend_updatedist(pend);
 		pend_scalelengthlu(pend);
+	}
+	/*update influence of u on l and vice versa*/
+	double ulx=pend->lx-pend->ux;
+	double uly=pend->ly-pend->uy;
+	if (scalprod(ulx,uly,pend->alx,pend->aly)>0){
+		double normvectx=ulx/norm(ulx,uly);
+		double normvecty=uly/norm(ulx,uly);
+		pend->alx+=projectx(pend->alx,pend->aly,normvectx,normvecty);
+		pend->aly+=projecty(pend->alx,pend->aly,normvectx,normvecty);
+	}
+	if (scalprod(-ulx,-uly,pend->aux,pend->auy)>0
+			&& (pend->maxdistuf+pend->maxdistlu)<
+			(pend->distuf+pend->distlu-0.1)){
+		double normvectx=-ulx/norm(ulx,uly);
+		double normvecty=-uly/norm(ulx,uly);
+		pend->aux+=projectx(pend->aux,pend->auy,normvectx,normvecty);
+		pend->auy+=projecty(pend->aux,pend->auy,normvectx,normvecty);
+	}
+
+	/*update place*/
+	pend->ux+=pend->vux*t;
+	pend->uy+=pend->vuy*t;
+	pend->lx+=pend->vlx*t;
+	pend->ly+=pend->vly*t;
+	/*preserve energy*/
+	double vusq=pend->vux*pend->vux+pend->vuy*pend->vuy;
+	double vlsq=pend->vlx*pend->vlx+pend->vly*pend->vly;
+	double epot=pend->en-fabs(pend->g)*(pend->uy+pend->ly);
+	if (fabs(2.0*epot-vusq-vlsq)>0.01 && (vusq+vlsq)>0.01){
+		double scal=sqrt((2.0*epot)/(vusq+vlsq));
+		pend->vlx=scal*pend->vlx;
+		pend->vly=scal*pend->vly;
+		pend->vux=scal*pend->vux;
+		pend->vuy=scal*pend->vuy;
 	}
 }
 void __noreturn
@@ -1122,20 +1221,9 @@ main(void)
 		}
 		if (pict==3){
 			display_clear(&dp);
-			//renderCoordinateSystem(&dp);
-//			renderRectangle(&dp,64-26,32-13,64+26,32+13);
-			pend_render(&dp,&pend);
-		/*	if ((pend.aux)/16.0+64.0>0 && (pend.aux)/16.0+64.0<128){
-				display_set(&dp,((int) (pend.aux/16.0))+64,
-				64-((int) (pend.auy/16.0))-32);
-			}*/
-			/*double scal=10.4;
-			if ((pend.deltax)/scal+64.0>0 && (pend.deltax)/scal+64.0<128){
-				display_set(&dp,((int) (pend.deltax/scal))+64,
-				64-((int) (pend.deltay/scal))-32);
-			}*/
-			display_update(&dp);
 			pend_updatetime(&pend,0.5);
+			pend_render(&dp,&pend);
+			display_update(&dp);
 		}
 		break;
 		case EVENT_BUTTON_A_DOWN:
