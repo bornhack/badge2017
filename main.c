@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lib/clock.c"
 #include "lib/emu.c"
@@ -381,6 +382,7 @@ enum event {
 	EVENT_BUTTON_Y_UP,
 	EVENT_BUTTON_POWER_DOWN,
 	EVENT_BUTTON_POWER_UP,
+	EVENT_TICK500,
 };
 
 static struct {
@@ -429,6 +431,38 @@ event_pop(void)
 	events.first = first % ARRAY_SIZE(events.queue);
 
 	return ev;
+}
+
+struct ticker_data {
+	struct plist_node n;
+	enum event event;
+	unsigned int delay;
+};
+
+static void
+ticker_callback(struct plist_node *n)
+{
+	struct ticker_data *d = (struct ticker_data *)n;
+
+	if (d->delay > 0) {
+		event_push(d->event);
+		plist_add(n, d->delay);
+	}
+}
+
+static void
+ticker_run(struct ticker_data *d, enum event event, unsigned int delay)
+{
+	d->n.fn = ticker_callback;
+	d->event = event;
+	d->delay = delay;
+	plist_add(&d->n, delay);
+}
+
+static void __unused
+ticker_stop(struct ticker_data *d)
+{
+	d->delay = 0;
 }
 
 struct button {
@@ -667,6 +701,8 @@ static void
 display_fish(struct display *dp, int wherex, int wherey, int fishsize, bool headleft)
 {
 	int fishsign=1;
+	int w = 128;
+	int h = 64;
 	if (headleft){
 		fishsign=-1;
 		wherex+=6*fishsize;
@@ -677,48 +713,57 @@ display_fish(struct display *dp, int wherex, int wherey, int fishsize, bool head
 		/*Topflin*/
 		for (int ind=1*fishsize ; ind <3*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,(wherey+indy)%h);
 		}
 		/*Above the eye*/
 		for (int ind=0*fishsize ; ind <4*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+1*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+1*fishsize+indy)%h);
 		}
 		for (int ind=5*fishsize ; ind <6*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+1*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+1*fishsize+indy)%h);
 		}
 		/*The Eye one*/
 		for (int ind=0*fishsize ; ind <1*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,  wherey+2*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+2*fishsize+indy)%h);
 		}
 		for (int ind=2*fishsize ; ind <6*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+2*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+2*fishsize+indy)%h);
 		}
 		/*The Eye two*/
 		for (int ind=0*fishsize ; ind <1*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,  wherey+3*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			  (wherey+3*fishsize+indy)%h);
 		}
 		for (int ind=2*fishsize ; ind <6*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+3*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+3*fishsize+indy)%h);
 		}
 		/*Below the eye*/
 		for (int ind=0*fishsize ; ind <4*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+4*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+4*fishsize+indy)%h);
 		}
 		for (int ind=5*fishsize ; ind <6*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+4*fishsize+indy);
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+4*fishsize+indy)%h);
 		}
 		/*Lowerfin*/
 		for (int ind=1*fishsize ; ind <2*fishsize ; ind++)
 		{
-			display_set(dp,wherex+fishsign*ind,wherey+5*fishsize+indy);		
+			display_set(dp,(wherex+fishsign*ind)%w,
+			(wherey+5*fishsize+indy)%h);
 		}
 	}
 
@@ -729,6 +774,11 @@ main(void)
 	unsigned int i = 0;
 	unsigned int rgb[3] = { 0, 0, 0 };
 	unsigned int pict = 0;
+	int fishTime=59;
+	int randomfishhight=40;
+	int randomfishpos=6;
+	struct ticker_data tick500;
+	//bool rgb_enabled;
 
 	/* auxhfrco is only needed when programming flash */
 	clock_auxhfrco_disable();
@@ -763,6 +813,7 @@ main(void)
 	/* initialize RGB diode */
 	rgb_init();
 	rgb_on();
+	//rgb_enabled = true;
 
 	/* make sure the POWER button is released */
 	while (!gpio_in(GPIO_PC4))
@@ -771,6 +822,8 @@ main(void)
 
 	/* now we can start listening for button presses */
 	buttons_init();
+
+	ticker_run(&tick500, EVENT_TICK500, 50);
 
 	while (1) {
 		switch (event_pop()) {
@@ -790,14 +843,6 @@ main(void)
 						(i==2) ? '*' : ' ');
 				display_update(&dp);
 			}
-			if (pict==2){
-				int time=128;	
-				time--;
-				if (time<1) time=128;
-				display_clear(&dp);
-				display_fish(&dp,time, 16, 6, false);
-				display_update(&dp);
-			}
 			if (pict==0){
 				display_clear(&dp);
 				printf("\n\n"
@@ -814,6 +859,30 @@ main(void)
 				display_update(&dp);
 			}
 			break;
+		case EVENT_TICK500:
+		if (pict==2) {
+				fishTime--;
+				if (fishTime<=0)
+				{
+					fishTime=128;
+					randomfishhight = rand() % 8+1;
+					randomfishpos = rand() % (64-6*randomfishhight);
+				}
+				display_clear(&dp);
+				display_fish(&dp,fishTime, randomfishpos, randomfishhight, false);
+				display_update(&dp);
+				rgb_on();
+				rgb_off();
+		}
+	/*		if (rgb_enabled) {
+				rgb_off();
+				rgb_enabled = false;
+			} else {
+				rgb_on();
+				rgb_enabled = true;
+			}
+			*/
+		break;
 		case EVENT_BUTTON_A_DOWN:
 			if (i > 0)
 				i--;
