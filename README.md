@@ -137,3 +137,16 @@ you can simply put the badge in bootloader mode by pressing the **BOOT** button,
 and then type `make dfu`. Usually your dfu-util package comes with rules to give
 your user (and hence dfu-util) access to the raw USB device. If not you might need
 `sudo make dfu`.
+
+## Examples developed during Bornhack 2017
+
+This repo also contains a few branches with examples developed at Barnhack. You can check them out locally with
+```sh
+git clone -b <BRANCH> https://github.com/bornhack/badge2017.git
+```
+..or just switch to the branch in your regular clone of this repo.
+
+- [gimp](https://github.com/bornhack/badge2017/tree/gimp) - [gimp](https://www.gimp.org/) can export pictures as C-code usable on the badge
+- [bornhackfish](https://github.com/bornhack/badge2017/tree/bornhackfish) - Standard example, but with fish and physics
+- [snake](https://github.com/bornhack/badge2017/tree/snake) - Play snake on your badge
+- [starfield](https://github.com/bornhack/badge2017/tree/starfield) - Fly through space
