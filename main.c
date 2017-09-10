@@ -29,11 +29,92 @@
 
 #include "font8x8.c"
 
-static struct {
-	const uint8_t *data;
-	size_t len;
-	volatile int ret;
-} i2c0;
+//Channel descriptors We have 6 channels but must allocate for 8 and align so
+DMA_DESCRIPTOR_TypeDef dmaControlBlock[8 * 2] __attribute__ ((aligned(256)));
+
+static volatile uint32_t dma_done = 0;
+
+void DMA_IRQHandler (void) {
+	/* For now just clear it and let it be */
+	uint32_t flags = DMA->IF;
+	DMA->IFC = flags;
+	dma_done |= flags;
+}
+
+static inline void dma_init(void) {
+	memset(dmaControlBlock,0,sizeof(dmaControlBlock));
+	clock_dma_enable();
+	DMA->CTRLBASE = (uint32_t)dmaControlBlock;
+	DMA->CONFIG |= DMA_CONFIG_EN;
+	NVIC_EnableIRQ(DMA_IRQn);
+/*	DMA->IEN = DMA_IEN_CH0DONE | DMA_IEN_CH1DONE | DMA_IEN_CH2DONE | DMA_IEN_CH3DONE | DMA_IEN_CH4DONE | DMA_IEN_CH5DONE | DMA_IEN_ERR;*/
+}
+
+#define MAX_DMA_LEN 1024
+/* Simple mem to mem  DMA transfer much more power friendly than memcpy ;) */
+static void  __unused dma_cpy(void *dst, const void *src, size_t len) {
+	size_t i;
+	DMA_DESCRIPTOR_TypeDef *descr= ((DMA_DESCRIPTOR_TypeDef *)(DMA->CTRLBASE)) + 0;
+	DMA->CH[0].CTRL = DMA_CH_CTRL_SOURCESEL_NONE;
+	DMA->CHALTC = DMA_CHALTC_CH0ALTC;
+	DMA->IEN |= DMA_IEN_CH0DONE;
+	//Add the minus 1 factor
+	src--;
+	dst--;
+	emu_em2_block();
+	while (len > 0) {
+		// Reset the done flag
+		dma_done &= ~DMA_IF_CH0DONE;
+		i = len < MAX_DMA_LEN? len : MAX_DMA_LEN;
+		src += i;
+		dst += i;
+		descr->SRCEND = src;
+		descr->DSTEND = dst;
+		/* We need autorequest as this is a software DMA interrupt */
+		descr->CTRL = DMA_CTRL_DST_INC_BYTE | DMA_CTRL_SRC_INC_BYTE | DMA_CTRL_SRC_SIZE_BYTE | DMA_CTRL_DST_SIZE_BYTE | DMA_CTRL_R_POWER_1 | ((i-1)<<_DMA_CTRL_N_MINUS_1_SHIFT) | DMA_CTRL_CYCLE_CTRL_AUTO;
+		// We need to enable the channel every time
+		DMA->CHENS = DMA_CHENS_CH0ENS;
+		DMA->CHSWREQ = DMA_CHSWREQ_CH0SWREQ;
+		while (!(dma_done & DMA_IF_CH0DONE))
+			__WFI();
+		len -= i;
+	};
+	emu_em2_unblock();
+	DMA->CHENC = DMA_CHENC_CH0ENC;
+	DMA->IEN &= ~DMA_IEN_CH0DONE;
+}
+
+static void __unused dma_set(void *dst, char val, size_t len) {
+	size_t i;
+	DMA_DESCRIPTOR_TypeDef *descr= ((DMA_DESCRIPTOR_TypeDef *)(DMA->CTRLBASE)) + 0;
+	DMA->CH[0].CTRL = DMA_CH_CTRL_SOURCESEL_NONE;
+	DMA->CHALTC = DMA_CHALTC_CH0ALTC;
+	DMA->IEN |= DMA_IEN_CH0DONE;
+	//Add the minus 1 factor
+	dst--;
+	emu_em2_block();
+	while (len > 0) {
+		// Reset the done flag
+		dma_done &= ~DMA_IF_CH0DONE;
+		i = len < MAX_DMA_LEN? len : MAX_DMA_LEN;
+		dst += i;
+		descr->SRCEND = &val;
+		descr->DSTEND = dst;
+		/* We need autorequest as this is a software DMA interrupt */
+		descr->CTRL = DMA_CTRL_DST_INC_BYTE | DMA_CTRL_SRC_INC_NONE | DMA_CTRL_SRC_SIZE_BYTE | DMA_CTRL_DST_SIZE_BYTE | DMA_CTRL_R_POWER_1 | ((i-1)<<_DMA_CTRL_N_MINUS_1_SHIFT) | DMA_CTRL_CYCLE_CTRL_AUTO;
+		// We need to enable the channel every time
+		DMA->CHENS = DMA_CHENS_CH0ENS;
+		DMA->CHSWREQ = DMA_CHSWREQ_CH0SWREQ;
+		while (!(dma_done & DMA_IF_CH0DONE))
+			__WFI();
+		len -= i;
+	};
+	emu_em2_unblock();
+	DMA->CHENC = DMA_CHENC_CH0ENC;
+	DMA->IEN &= ~DMA_IEN_CH0DONE;
+}
+
+static volatile int i2c0_ret;
 
 void
 I2C0_IRQHandler(void)
@@ -43,28 +124,14 @@ I2C0_IRQHandler(void)
 	i2c0_flags_clear(flags);
 
 	if (i2c0_flag_nack(flags)) {
-		i2c0_flag_tx_buffer_level_disable();
 		i2c0_stop();
 		i2c0_clear_tx();
-		i2c0.len = 1;
 		return;
 	}
 
 	if (i2c0_flag_master_stop(flags)) {
-		i2c0.ret = -i2c0.len;
+		i2c0_ret = -1;
 		return;
-	}
-
-	if (i2c0_flag_tx_buffer_level(flags)) {
-		size_t len = i2c0.len;
-
-		if (len > 0) {
-			i2c0_txdata(*i2c0.data++);
-			i2c0.len = len - 1;
-		} else {
-			i2c0_flag_tx_buffer_level_disable();
-			i2c0_stop();
-		}
 	}
 }
 
@@ -72,15 +139,43 @@ static int
 i2c0_write(const uint8_t *ptr, size_t len)
 {
 	int ret;
+	size_t i;
+	bool start_sent = false;
+	DMA_DESCRIPTOR_TypeDef *descr= ((DMA_DESCRIPTOR_TypeDef *)(DMA->CTRLBASE)) + 0;
 
-	i2c0.data = ptr;
-	i2c0.len = len;
-	i2c0.ret = 1;
+	i2c0_ret = 1;
 	emu_em2_block();
-	i2c0_flag_tx_buffer_level_enable();
-	i2c0_start();
-	while ((ret = i2c0.ret) > 0)
+	DMA->CH[0].CTRL = DMA_CH_CTRL_SOURCESEL_I2C0 | DMA_CH_CTRL_SIGSEL_I2C0TXBL;
+	DMA->CHALTC = DMA_CHALTC_CH0ALTC;
+	DMA->IEN |= DMA_IEN_CH0DONE;
+	//Add the minus 1 factor
+	ptr--;
+	while (i2c0_ret > 0 && len > 0) {
+		// Reset the done flag
+		dma_done &= ~DMA_IF_CH0DONE;
+		i = len < MAX_DMA_LEN? len : MAX_DMA_LEN;;
+		ptr += i;
+		descr->SRCEND = ptr;
+		descr->DSTEND = &(I2C0->TXDATA);
+		/* We need autorequest as this is a software DMA interrupt */
+		descr->CTRL = DMA_CTRL_DST_INC_NONE | DMA_CTRL_SRC_INC_BYTE | DMA_CTRL_SRC_SIZE_BYTE | DMA_CTRL_DST_SIZE_BYTE | DMA_CTRL_R_POWER_1 | ((i-1)<<_DMA_CTRL_N_MINUS_1_SHIFT) | DMA_CTRL_CYCLE_CTRL_BASIC;
+		// We need to enable the channel every time
+		DMA->CHENS = DMA_CHENS_CH0ENS;
+		if (i2c0_ret > 0 && !start_sent) {
+			emu_em2_block();
+			i2c0_start();
+			start_sent = true;
+			I2C0->CTRL |= I2C_CTRL_AUTOSE;
+		}
+		while (!(dma_done & DMA_IF_CH0DONE))
+			__WFI();
+		len -= i;
+	};
+	DMA->CHENC = DMA_CHENC_CH0ENC;
+	DMA->IEN &= ~DMA_IEN_CH0DONE;
+	while ((ret = i2c0_ret) > 0)
 		__WFI();
+	I2C0->CTRL &= ~I2C_CTRL_AUTOSE;
 	emu_em2_unblock();
 	return ret;
 }
@@ -136,7 +231,7 @@ static const uint8_t display_init_data[] = {
 static int
 display_init(struct display *dp)
 {
-	memset(dp, 0, sizeof(struct display));
+	dma_set(dp, 0, sizeof(struct display));
 	dp->reset[0] = 0x78; /* address                             */
 	dp->reset[1] = 0x80; /* next byte is control                */
 	dp->reset[2] = 0x00; /* set higher column start address = 0 */
@@ -194,7 +289,7 @@ display_clear(struct display *dp)
 {
 	dp->tx = 0;
 	dp->ty = 0;
-	memset(dp->framebuf, 0, sizeof(dp->framebuf));
+	dma_set(dp->framebuf, 0, sizeof(dp->framebuf));
 }
 
 /* set a single pixel in the frame buffer */
@@ -720,6 +815,9 @@ main(void)
 	NVIC_SetPriority(RTC_IRQn, 2);
 	NVIC_EnableIRQ(RTC_IRQn);
 	rtc_config(RTC_ENABLE);
+	
+	/* enable dma */
+	dma_init();
 
 	/* enable and configure GPIOs */
 	gpio_init();
