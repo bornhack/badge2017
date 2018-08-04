@@ -66,6 +66,8 @@ while read -r line; do
     tstart[$i]="$(time_to_unix "${line#DTSTART:}")";;
   'DTEND:'*)
     tend[$i]="$(time_to_unix "${line#DTEND:}")";;
+  'DESCRIPTION:'*)
+    ;;
   *)
     echo "Don't know '$line'" >&2;;
   esac
