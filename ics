@@ -2,7 +2,7 @@
 
 set -e
 
-readonly URL='https://bornhack.dk/bornhack-2017/program/ics/'
+readonly URL='https://bornhack.dk/bornhack-2018/program/ics/'
 
 time_to_unix() {
   local ts="${1//T/ }"
@@ -89,8 +89,8 @@ done < <(
 
 echo 'static const char welcome[] = "\n"'
 echo -e '\t"    Bornhack\\n"'
-echo -e '\t" Make Tradition\\n"'
-echo -e '\t"      2017\\n"'
+echo -e '\t"    scale it\\n"'
+echo -e '\t"      2018\\n"'
 echo -e '\t"   bornhack.dk\\n"'
 echo -e '\t"       <3";'
 echo
@@ -141,7 +141,7 @@ echo -e '\tonline,'
 echo -e '\tcode,'
 for ((i=0; i < N; i++)); do
   e=${sorted[$i]}
-  day=$(($(printf '%(%d)T' "${tstart[$e]}")-21))
+  day=$(($(printf '%(%d)T' "${tstart[$e]}")-16))
   if [[ $day -ne $lday ]]; then
     echo '};'
     echo "static const char *const column$day[] = {"
